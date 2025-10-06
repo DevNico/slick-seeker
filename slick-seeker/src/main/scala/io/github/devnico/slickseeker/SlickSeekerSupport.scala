@@ -98,9 +98,9 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
       }
   }
 
-  // Provide SeekerSortKey implicits with profile API in scope
-  trait SeekerSortKeyImplicits extends ColumnSeekFilterImplicits {
-    // Identity mapping for types without custom ordering (higher priority)
+  // Lower priority implicits for identity mappings (no custom ordering)
+  trait SeekerSortKeyLowPriorityImplicits extends ColumnSeekFilterImplicits {
+    // Identity mapping for types without custom ordering
     implicit def seekerSortKeyIdentity[T, CVE](implicit
         btt: BaseTypedType[T],
         csf: ColumnSeekFilter[T],
@@ -129,7 +129,10 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
         def filter: ColumnSeekFilter[Option[T]]                                               = csf
         def codec: CursorValueCodec[Option[T], CVE]                                           = cvc
       }
+  }
 
+  // Higher priority implicits for custom ordering
+  trait SeekerSortKeyImplicits extends SeekerSortKeyLowPriorityImplicits {
     // Custom ordering mapping (highest priority)
     implicit def seekerSortKeyOrder[T, CVE](implicit
         order: SeekOrder[T],
