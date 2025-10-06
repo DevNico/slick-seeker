@@ -185,6 +185,8 @@ val seeker = persons.toSeeker
 
 ## Custom Cursor Environments
 
+Following are only examples and not meant to copy as-is. Adjust for your use case.
+
 ### Identity (Testing)
 
 Useful for debugging - no encoding:

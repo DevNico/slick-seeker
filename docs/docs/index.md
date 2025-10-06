@@ -22,6 +22,7 @@ SELECT * FROM users ORDER BY name LIMIT 100 OFFSET 19900;
 ```
 
 Problems:
+
 - Slow for deep pages (O(n) where n = offset)
 - Unstable with concurrent writes (items shift between pages)
 - Memory intensive for large offsets
@@ -37,6 +38,7 @@ LIMIT 100;
 ```
 
 Benefits:
+
 - Constant O(1) performance for any page
 - Stable with concurrent writes
 - Efficient index usage

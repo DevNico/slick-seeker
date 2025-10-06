@@ -35,6 +35,7 @@ val seeker = users.toSeeker
 ```
 
 Works with:
+
 - Table columns: `_.name`, `_.email`
 - Tuple fields: `_._1`, `_._2`
 - Nested tuples: `_._1._2`
@@ -170,10 +171,12 @@ val backToPage1 = seeker.page(limit = 20, cursor = page2.prevCursor)
 ### How It Works
 
 Cursors encode direction:
+
 - Forward: `>` prefix
 - Backward: `<` prefix
 
 For backward pagination:
+
 1. Sort order is reversed
 2. Results are retrieved
 3. Results are reversed back to original order
@@ -196,6 +199,7 @@ trait MyPostgresProfile extends PostgresProfile
 ```
 
 Components:
+
 - **Codec**: Serializes values (e.g., JSON)
 - **Decorator**: Transforms final string (e.g., Base64)
 
@@ -252,6 +256,7 @@ trait MyProfile extends PostgresProfile
 ```
 
 Decorators are useful for:
+
 - **Base64** - URL-safe encoding
 - **Compression** - Reduce cursor size
 - **Encryption** - Hide cursor content

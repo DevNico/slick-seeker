@@ -46,6 +46,7 @@ import MyPostgresProfile.api._
 ```
 
 This provides:
+
 - All Slick query methods (`filter`, `sortBy`, `map`, etc.)
 - Slick Seeker's `.toSeeker` extension method
 - All necessary type classes and implicits
