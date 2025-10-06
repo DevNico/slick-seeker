@@ -97,13 +97,13 @@ final case class SlickSeeker[E, U, CVE, C, CU](
 
       val nextCursor = if (hasNext && items.nonEmpty) {
         val item         = items.last
-        val cursorValues = encodeCursor(item._1, item._2, queryColumns)
+        val cursorValues = encodeCursor(item._2)
         Some(cursorEnvironment.encode(cursorValues, CursorDirection.Forward))
       } else None
 
       val prevCursor = if (hasPrev && items.nonEmpty) {
         val item         = items.head
-        val cursorValues = encodeCursor(item._1, item._2, queryColumns)
+        val cursorValues = encodeCursor(item._2)
         Some(cursorEnvironment.encode(cursorValues, CursorDirection.Backward))
       } else None
 
@@ -116,16 +116,8 @@ final case class SlickSeeker[E, U, CVE, C, CU](
     }
   }
 
-  private def encodeCursor(
-      resultRow: U,
-      projectedCursor: CU,
-      queryColumns: Seq[SeekColumn[E, U, CVE]]
-  ): Vector[CVE] = {
-    val autoValues = qwc.encode(projectedCursor)
-    autoValues.zipWithIndex.map { case (value, idx) =>
-      val col = queryColumns(idx)
-      col.encodeCursor(value.asInstanceOf[col.Column])
-    }.toVector
+  private def encodeCursor(projectedCursor: CU): Vector[CVE] = {
+    qwc.encode(projectedCursor).toVector
   }
 
   private def buildFilter(
