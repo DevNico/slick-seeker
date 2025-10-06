@@ -14,10 +14,10 @@ package io.github.devnico.slickseeker.pagination
   *   Type of items
   */
 final case class PaginatedResult[T](
-  total: Int,
-  items: Seq[T],
-  prevCursor: Option[String],
-  nextCursor: Option[String]
+    total: Int,
+    items: Seq[T],
+    prevCursor: Option[String],
+    nextCursor: Option[String]
 ) {
 
   /** Map items to a different type while preserving pagination metadata */

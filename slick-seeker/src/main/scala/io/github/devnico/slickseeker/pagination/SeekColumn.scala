@@ -7,28 +7,29 @@ import slick.lifted.{ColumnOrdered, Rep}
 
 private[slickseeker] trait SeekColumn[E, U, CVE] {
   import ColumnSeekFilterTypes._
-  
+
   type Column
   def col: E => ColumnOrdered[Column]
   def filter: ColumnSeekFilter[Column]
   def codec: CursorValueCodec[Column, CVE]
-  
+
   def encodeCursor(value: Column): CVE = codec.encode(value)
-  
+
   def withDirection(direction: io.github.devnico.slickseeker.support.SortDirection): SeekColumn[E, U, CVE] = {
     val self = this
     new SeekColumn[E, U, CVE] {
       type Column = self.Column
       val col: E => ColumnOrdered[Column] = { t =>
         val current = self.col(t)
-        val newDir  = if (direction == io.github.devnico.slickseeker.support.SortDirection.Asc) Ordering.Asc else Ordering.Desc
+        val newDir =
+          if (direction == io.github.devnico.slickseeker.support.SortDirection.Asc) Ordering.Asc else Ordering.Desc
         val finalNulls =
           if (current.ord.nulls != Ordering.NullsDefault) {
             (current.ord.nulls, direction) match {
               case (Ordering.NullsFirst, io.github.devnico.slickseeker.support.SortDirection.Desc) => Ordering.NullsLast
               case (Ordering.NullsLast, io.github.devnico.slickseeker.support.SortDirection.Desc)  => Ordering.NullsFirst
               case (nulls, io.github.devnico.slickseeker.support.SortDirection.Asc)                => nulls
-              case (nulls, _)                                => nulls
+              case (nulls, _)                                                                      => nulls
             }
           } else {
             if (direction == io.github.devnico.slickseeker.support.SortDirection.Asc) Ordering.NullsLast
@@ -37,10 +38,10 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         current.copy(ord = Ordering(newDir, finalNulls))
       }
       val filter = self.filter
-      val codec = self.codec
+      val codec  = self.codec
     }
   }
-  
+
   def reversed: SeekColumn[E, U, CVE] = {
     val self = this
     new SeekColumn[E, U, CVE] {
@@ -59,7 +60,7 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         }
       }
       val filter = self.filter
-      val codec = self.codec
+      val codec  = self.codec
     }
   }
 
@@ -83,8 +84,8 @@ private[slickseeker] object SeekColumn {
       codecFn: CursorValueCodec[T, CVE]
   ): SeekColumn[E, U, CVE] = new SeekColumn[E, U, CVE] {
     type Column = T
-    val col = colFn
+    val col    = colFn
     val filter = filterFn
-    val codec = codecFn
+    val codec  = codecFn
   }
 }

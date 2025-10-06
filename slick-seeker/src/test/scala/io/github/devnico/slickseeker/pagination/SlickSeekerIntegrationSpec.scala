@@ -24,7 +24,7 @@ class SlickSeekerIntegrationSpec extends AnyWordSpec with Matchers with BeforeAn
     def decode(value: String): Option[T] = scala.util.Try {
       value match {
         case _ if value.isEmpty => value.asInstanceOf[T]
-        case _ => value.asInstanceOf[T]
+        case _                  => value.asInstanceOf[T]
       }
     }.toOption
   }
@@ -128,7 +128,7 @@ class SlickSeekerIntegrationSpec extends AnyWordSpec with Matchers with BeforeAn
       result.items should have size 3
       result.items.map(_._1._2) shouldBe Seq("Alice", "Bob", "Charlie")
     }
-    */
+     */
   }
 
   "SlickSeeker bidirectional pagination" should {

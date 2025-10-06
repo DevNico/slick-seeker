@@ -45,7 +45,7 @@ final case class SlickSeeker[E, U, CVE, C, CU](
     // Explicitly import the api to make implicits available
     val theApi = profile.api
     import theApi._
-    
+
     val decodedCursor = cursorEnvironment.decodeWithDirectionOrThrow(cursor)
     val isBackward    = decodedCursor.exists(_._1 == CursorDirection.Backward)
     val rawCursor     = decodedCursor.map(_._2)
@@ -53,27 +53,27 @@ final case class SlickSeeker[E, U, CVE, C, CU](
     val queryColumns = if (isBackward) columns.map(_.reversed) else columns
 
     val normalizedLimit = limit.max(1).min(maxLimit)
-    
+
     // Scala 2 workaround: map the length to a single-value query
     val totalAction: DBIO[Int] = {
-      val countQuery = baseQuery.map(_ => 1).length  // This returns Rep[Int]
+      val countQuery = baseQuery.map(_ => 1).length // This returns Rep[Int]
       // Wrap it in a Query by using a single-value query
       val wrappedQuery = Query(countQuery)
-      val ext = streamableQueryActionExtensionMethods(wrappedQuery)
+      val ext          = streamableQueryActionExtensionMethods(wrappedQuery)
       ext.result.map(_.head)
     }
-    
+
     val resultsAction: DBIO[Seq[(U, CU)]] = {
-      val filtered = baseQuery.filter(buildFilter(_, queryColumns, rawCursor))
-      val sorted = filtered.sortBy(buildOrdered(_, queryColumns))
-      val limited = sorted.take(normalizedLimit + 1)
+      val filtered  = baseQuery.filter(buildFilter(_, queryColumns, rawCursor))
+      val sorted    = filtered.sortBy(buildOrdered(_, queryColumns))
+      val limited   = sorted.take(normalizedLimit + 1)
       val projected = qwc.project(limited)
-      val ext = streamableQueryActionExtensionMethods(projected)
+      val ext       = streamableQueryActionExtensionMethods(projected)
       ext.result
     }
-    
+
     for {
-      total <- totalAction
+      total   <- totalAction
       results <- resultsAction
     } yield {
       val hasMoreResults = results.size > normalizedLimit

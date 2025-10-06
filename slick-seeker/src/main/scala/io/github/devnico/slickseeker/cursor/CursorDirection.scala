@@ -4,6 +4,6 @@ package io.github.devnico.slickseeker.cursor
 sealed trait CursorDirection extends Product with Serializable
 
 object CursorDirection {
-  case object Forward extends CursorDirection
+  case object Forward  extends CursorDirection
   case object Backward extends CursorDirection
 }

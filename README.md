@@ -2,7 +2,7 @@
 
 Type-safe, high-performance cursor-based pagination for Slick 3.5+.
 
-[![CI](https://github.com/DevNico/slick-seeker/workflows/CI/badge.svg)](https://github.com/DevNico/slick-seeker/actions)
+[![CI](https://github.com/DevNico/slick-seeker/actions/workflows/ci.yml/badge.svg)](https://github.com/DevNico/slick-seeker/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ## Features

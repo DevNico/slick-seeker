@@ -7,15 +7,15 @@ class SeekOrderSpec extends AnyWordSpec with Matchers {
 
   sealed trait Priority
   object Priority {
-    case object Low extends Priority
+    case object Low    extends Priority
     case object Medium extends Priority
-    case object High extends Priority
+    case object High   extends Priority
   }
 
   sealed trait Status
   object Status {
-    case object Draft extends Status
-    case object Pending extends Status
+    case object Draft    extends Status
+    case object Pending  extends Status
     case object Approved extends Status
     case object Rejected extends Status
   }

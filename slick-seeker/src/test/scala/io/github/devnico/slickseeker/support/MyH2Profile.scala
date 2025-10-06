@@ -7,9 +7,8 @@ import scala.util.Try
 
 /** Test profile that demonstrates the recommended pattern.
   *
-  * Define cursor environment inside your profile, similar to how you would define
-  * custom database type mappings.
-  * 
+  * Define cursor environment inside your profile, similar to how you would define custom database type mappings.
+  *
   * To use SlickSeeker, import the profile API:
   * {{{
   * import MyH2Profile.api._
@@ -17,7 +16,7 @@ import scala.util.Try
   * }}}
   */
 object MyH2Profile extends H2Profile with SlickSeekerSupport {
-  
+
   // Cursor codec for tests - simple string-based encoding
   case class StringCursorCodec() extends CursorCodec[String] {
     def encode(values: Seq[String]): String = values.mkString("|")
@@ -26,7 +25,6 @@ object MyH2Profile extends H2Profile with SlickSeekerSupport {
   }
 
   // Define cursor environment inside the profile (like custom DB types)
-  implicit val cursorEnv: CursorEnvironment[String] = 
+  implicit val cursorEnv: CursorEnvironment[String] =
     CursorEnvironment(StringCursorCodec(), Base64Decorator())
 }
-

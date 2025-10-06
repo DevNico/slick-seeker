@@ -41,7 +41,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val prevCond = LiteralColumn(Option(true))
 
       val result = filter(ordered, 10, prevCond)
-      
+
       result should not be null
       result.toString should include("or")
     }
@@ -52,7 +52,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val prevCond = LiteralColumn(Option(true))
 
       val result = filter(ordered, 10, prevCond)
-      
+
       result should not be null
       result.toString should include("or")
     }
@@ -67,7 +67,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val prevCond = LiteralColumn(Option(true))
 
       val result = filter(ordered, Some(10), prevCond)
-      
+
       result should not be null
       result.toString should include("or")
     }
@@ -78,7 +78,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val prevCond = LiteralColumn(Option(true))
 
       val result = filter(ordered, None, prevCond)
-      
+
       result should not be null
       result.toString should include("or")
     }
@@ -89,7 +89,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val prevCond = LiteralColumn(Option(true))
 
       val result = filter(ordered, Some(10), prevCond)
-      
+
       result should not be null
       result.toString should include("or")
     }
@@ -100,7 +100,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val prevCond = LiteralColumn(Option(true))
 
       val result = filter(ordered, None, prevCond)
-      
+
       result should not be null
       result.toString should include("and")
     }
@@ -111,7 +111,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val prevCond = LiteralColumn(Option(true))
 
       val result = filter(ordered, Some(10), prevCond)
-      
+
       result should not be null
       result.toString should include("or")
     }
@@ -122,7 +122,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val prevCond = LiteralColumn(Option(true))
 
       val result = filter(ordered, Some(10), prevCond)
-      
+
       result should not be null
       result.toString should include("or")
     }
