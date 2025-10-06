@@ -54,90 +54,49 @@ libraryDependencies ++= Seq(
 
 ## Quick Example
 
-=== "Scala 3"
+```scala
+// Step 1: Create a custom profile
+import slick.jdbc.PostgresProfile
+import io.github.devnico.slickseeker.SlickSeekerSupport
+import io.github.devnico.slickseeker.playjson.PlayJsonSeekerSupport
 
-    ```scala
-    // Step 1: Create a custom profile
-    import slick.jdbc.PostgresProfile
-    import io.github.devnico.slickseeker.SlickSeekerSupport
-    import io.github.devnico.slickseeker.playjson.given
+trait MyPostgresProfile extends PostgresProfile 
+  with SlickSeekerSupport 
+  with PlayJsonSeekerSupport {
+  
+  object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+  override val api: MyApi.type = MyApi
+}
 
-    trait MyPostgresProfile extends PostgresProfile with SlickSeekerSupport {
-      // Define cursor environment inside your profile (like custom DB types)
-      given CursorEnvironment[JsValue] = PlayJsonSupport.cursorEnvironment(Base64Decorator())
-    }
-    object MyPostgresProfile extends MyPostgresProfile
+object MyPostgresProfile extends MyPostgresProfile
 
-    // Step 2: Import your profile API
-    import MyPostgresProfile.api.*
+// Step 2: Import your profile API
+import MyPostgresProfile.api._
 
-    // Step 3: Define your table
-    case class User(id: Int, name: String, email: String)
+// Step 3: Define your table
+case class User(id: Int, name: String, email: String)
 
-    class Users(tag: Tag) extends Table[User](tag, "users") {
-      def id = column[Int]("id", O.PrimaryKey, O.AutoInc)
-      def name = column[String]("name")
-      def email = column[String]("email")
-      def * = (id, name, email).mapTo[User]
-    }
+class Users(tag: Tag) extends Table[User](tag, "users") {
+  def id = column[Int]("id", O.PrimaryKey, O.AutoInc)
+  def name = column[String]("name")
+  def email = column[String]("email")
+  def * = (id, name, email).mapTo[User]
+}
 
-    val users = TableQuery[Users]
+val users = TableQuery[Users]
 
-    // Create a seeker
-    val seeker = users.toSeeker
-      .seek(_.name.asc)      // Primary sort
-      .seek(_.id.asc)        // Tiebreaker
+// Create a seeker
+val seeker = users.toSeeker
+  .seek(_.name.asc)      // Primary sort
+  .seek(_.id.asc)        // Tiebreaker
 
-    // Paginate!
-    val page1 = db.run(seeker.page(limit = 20, cursor = None))
-    // PaginatedResult(total=100, items=[...], nextCursor=Some("..."), prevCursor=None)
+// Paginate!
+val page1 = db.run(seeker.page(limit = 20, cursor = None))
+// PaginatedResult(total=100, items=[...], nextCursor=Some("..."), prevCursor=None)
 
-    val page2 = db.run(seeker.page(limit = 20, cursor = page1.nextCursor))
-    // Continue pagination...
-    ```
-
-=== "Scala 2"
-
-    ```scala
-    // Step 1: Create a custom profile
-    import slick.jdbc.PostgresProfile
-    import io.github.devnico.slickseeker.SlickSeekerSupport
-    import io.github.devnico.slickseeker.playjson._
-
-    trait MyPostgresProfile extends PostgresProfile with SlickSeekerSupport {
-      // Define cursor environment inside your profile (like custom DB types)
-      implicit val cursorEnv: CursorEnvironment[JsValue] = 
-        PlayJsonSupport.cursorEnvironment(Base64Decorator())
-    }
-    object MyPostgresProfile extends MyPostgresProfile
-
-    // Step 2: Import your profile API
-    import MyPostgresProfile.api._
-
-    // Step 3: Define your table
-    case class User(id: Int, name: String, email: String)
-
-    class Users(tag: Tag) extends Table[User](tag, "users") {
-      def id = column[Int]("id", O.PrimaryKey, O.AutoInc)
-      def name = column[String]("name")
-      def email = column[String]("email")
-      def * = (id, name, email).mapTo[User]
-    }
-
-    val users = TableQuery[Users]
-
-    // Create a seeker
-    val seeker = users.toSeeker
-      .seek(_.name.asc)      // Primary sort
-      .seek(_.id.asc)        // Tiebreaker
-
-    // Paginate!
-    val page1 = db.run(seeker.page(limit = 20, cursor = None))
-    // PaginatedResult(total=100, items=[...], nextCursor=Some("..."), prevCursor=None)
-
-    val page2 = db.run(seeker.page(limit = 20, cursor = page1.nextCursor))
-    // Continue pagination...
-    ```
+val page2 = db.run(seeker.page(limit = 20, cursor = page1.nextCursor))
+// Continue pagination...
+```
 
 
 ## Learn More

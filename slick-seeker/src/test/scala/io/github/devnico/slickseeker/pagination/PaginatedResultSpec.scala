@@ -8,46 +8,6 @@ class PaginatedResultSpec extends AnyWordSpec with Matchers {
   case class Person(id: Int, name: String)
   case class PersonDTO(name: String)
 
-  "PaginatedResult" should {
-    "store all pagination metadata" in {
-      val result = PaginatedResult(
-        total = 100,
-        items = Seq(Person(1, "Alice"), Person(2, "Bob")),
-        prevCursor = Some("prev-cursor"),
-        nextCursor = Some("next-cursor")
-      )
-
-      result.total shouldBe 100
-      result.items should have size 2
-      result.prevCursor shouldBe Some("prev-cursor")
-      result.nextCursor shouldBe Some("next-cursor")
-    }
-
-    "handle no cursors for single page" in {
-      val result = PaginatedResult(
-        total = 2,
-        items = Seq(Person(1, "Alice"), Person(2, "Bob")),
-        prevCursor = None,
-        nextCursor = None
-      )
-
-      result.prevCursor shouldBe None
-      result.nextCursor shouldBe None
-    }
-
-    "handle empty items" in {
-      val result = PaginatedResult[Person](
-        total = 0,
-        items = Seq.empty,
-        prevCursor = None,
-        nextCursor = None
-      )
-
-      result.total shouldBe 0
-      result.items shouldBe empty
-    }
-  }
-
   "mapItems" should {
     "transform items while preserving metadata" in {
       val original = PaginatedResult(

@@ -4,10 +4,10 @@ import io.github.devnico.slickseeker.support.MyH2Profile
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import slick.ast.{BaseTypedType, Ordering, ScalaBaseType}
-import slick.lifted.{ColumnOrdered, LiteralColumn}
+import slick.lifted.ColumnOrdered
 
 class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
-  import MyH2Profile.Implicits._
+  import MyH2Profile.api._
 
   implicit val boolType: BaseTypedType[Boolean] = ScalaBaseType.booleanType match {
     case bt: BaseTypedType[Boolean @unchecked] => bt
