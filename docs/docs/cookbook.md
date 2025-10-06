@@ -9,7 +9,7 @@ import io.github.devnico.slickseeker._
 import play.api.mvc._
 import play.api.libs.json._
 
-// Define your profile with cursor environment
+// Import your profile API
 import MyPostgresProfile.api._
 
 class UserController @Inject()(
@@ -17,7 +17,7 @@ class UserController @Inject()(
   db: Database
 )(implicit ec: ExecutionContext) extends AbstractController(cc) {
 
-  given Format[User] = Json.format[User]
+  implicit val userFormat: Format[User] = Json.format[User]
 
   def list(
     cursor: Option[String],
@@ -190,9 +190,16 @@ val seeker = persons.toSeeker
 Useful for debugging - no encoding:
 
 ```scala
-trait MyProfile extends PostgresProfile with SlickSeekerSupport {
-  implicit val cursorEnv: CursorEnvironment[JsValue] = 
-    PlayJsonSupport.cursorEnvironment(IdentityDecorator())
+trait MyProfile extends PostgresProfile 
+  with SlickSeekerSupport 
+  with PlayJsonSeekerSupport {
+  
+  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+    override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
+      CursorEnvironment(jsonCursorCodec, IdentityDecorator())
+  }
+  
+  override val api: MyApi.type = MyApi
 }
 // Cursor looks like: >[1,"Alice"]
 ```
@@ -227,11 +234,16 @@ class GzipDecorator(inner: CursorDecorator = IdentityDecorator())
   }
 }
 
-trait MyProfile extends PostgresProfile with SlickSeekerSupport {
-  implicit val cursorEnv: CursorEnvironment[JsValue] = 
-    PlayJsonSupport.cursorEnvironment(
-      Base64Decorator(GzipDecorator())
-    )
+trait MyProfile extends PostgresProfile 
+  with SlickSeekerSupport 
+  with PlayJsonSeekerSupport {
+  
+  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+    override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
+      CursorEnvironment(jsonCursorCodec, Base64Decorator(GzipDecorator()))
+  }
+  
+  override val api: MyApi.type = MyApi
 }
 ```
 
@@ -272,11 +284,16 @@ class HMACDecorator(
   }
 }
 
-trait MyProfile extends PostgresProfile with SlickSeekerSupport {
-  implicit val cursorEnv: CursorEnvironment[JsValue] = 
-    PlayJsonSupport.cursorEnvironment(
-      Base64Decorator(HMACDecorator("your-secret-key"))
-    )
+trait MyProfile extends PostgresProfile 
+  with SlickSeekerSupport 
+  with PlayJsonSeekerSupport {
+  
+  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+    override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
+      CursorEnvironment(jsonCursorCodec, Base64Decorator(HMACDecorator("your-secret-key")))
+  }
+  
+  override val api: MyApi.type = MyApi
 }
 ```
 
@@ -319,11 +336,16 @@ class AESDecorator(
   }
 }
 
-trait MyProfile extends PostgresProfile with SlickSeekerSupport {
-  implicit val cursorEnv: CursorEnvironment[JsValue] = 
-    PlayJsonSupport.cursorEnvironment(
-      Base64Decorator(AESDecorator("my-secret-key-16"))
-    )
+trait MyProfile extends PostgresProfile 
+  with SlickSeekerSupport 
+  with PlayJsonSeekerSupport {
+  
+  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+    override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
+      CursorEnvironment(jsonCursorCodec, Base64Decorator(AESDecorator("my-secret-key-16")))
+  }
+  
+  override val api: MyApi.type = MyApi
 }
 ```
 

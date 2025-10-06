@@ -185,11 +185,13 @@ This ensures consistent ordering regardless of direction.
 The cursor environment controls how cursors are encoded. Define it inside your profile:
 
 ```scala
-import io.github.devnico.slickseeker.playjson._
+import io.github.devnico.slickseeker.playjson.PlayJsonSeekerSupport
 
-trait MyPostgresProfile extends PostgresProfile with SlickSeekerSupport {
-  implicit val cursorEnv: CursorEnvironment[JsValue] = 
-    PlayJsonSupport.cursorEnvironment(Base64Decorator())
+trait MyPostgresProfile extends PostgresProfile 
+  with SlickSeekerSupport 
+  with PlayJsonSeekerSupport {
+  object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+  override val api: MyApi.type = MyApi
 }
 ```
 
@@ -202,20 +204,17 @@ Components:
 Decorators transform cursor strings. Chain them for multiple transformations:
 
 ```scala
-trait MyProfile extends PostgresProfile with SlickSeekerSupport {
-  // Identity (no transformation)
-  implicit val cursorEnv1: CursorEnvironment[JsValue] = 
-    PlayJsonSupport.cursorEnvironment(IdentityDecorator())
-
-  // Base64 only
-  implicit val cursorEnv2: CursorEnvironment[JsValue] = 
-    PlayJsonSupport.cursorEnvironment(Base64Decorator())
-
-  // Base64 + Gzip (applied inside-out)
-  implicit val cursorEnv3: CursorEnvironment[JsValue] = 
-    PlayJsonSupport.cursorEnvironment(
-      Base64Decorator(GzipDecorator())
-    )
+trait MyProfile extends PostgresProfile 
+  with SlickSeekerSupport 
+  with PlayJsonSeekerSupport {
+  
+  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+    // Override with custom decorator
+    override implicit val cursorEnvironment: CursorEnvironment[JsValue] = 
+      CursorEnvironment(jsonCursorCodec, IdentityDecorator())
+  }
+  
+  override val api: MyApi.type = MyApi
 }
 ```
 
@@ -239,9 +238,16 @@ class HexDecorator(inner: CursorDecorator = IdentityDecorator())
 }
 
 // Use it
-trait MyProfile extends PostgresProfile with SlickSeekerSupport {
-  implicit val cursorEnv: CursorEnvironment[JsValue] = 
-    PlayJsonSupport.cursorEnvironment(Base64Decorator(HexDecorator()))
+trait MyProfile extends PostgresProfile 
+  with SlickSeekerSupport 
+  with PlayJsonSeekerSupport {
+  
+  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+    override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
+      CursorEnvironment(jsonCursorCodec, Base64Decorator(HexDecorator()))
+  }
+  
+  override val api: MyApi.type = MyApi
 }
 ```
 
@@ -256,7 +262,7 @@ Decorators are useful for:
 ### 1. Always Include a Unique Column
 
 ```scala
-// BAD: Non-unique sort can miss items
+// BAD: Non-unique sort can miss/duplicate items
 .seek(_.status)
 
 // GOOD: Include unique tiebreaker

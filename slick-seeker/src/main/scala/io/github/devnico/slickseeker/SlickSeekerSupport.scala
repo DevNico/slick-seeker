@@ -9,52 +9,36 @@ import slick.lifted
 
 /** SlickSeekerSupport trait provides cursor-based pagination support for Slick queries.
   *
-  * This trait should be mixed in with a Slick `JdbcProfile` to provide pagination capabilities.
+  * Mix this trait into your Slick profile and define a cursor environment:
   *
-  * Example usage with PostgreSQL:
   * {{{
   * import slick.jdbc.PostgresProfile
   * import io.github.devnico.slickseeker.SlickSeekerSupport
+  * import io.github.devnico.slickseeker.playjson.PlayJsonSeekerSupport
   *
-  * trait MyPostgresProfile extends PostgresProfile with SlickSeekerSupport
+  * trait MyPostgresProfile extends PostgresProfile
+  *   with SlickSeekerSupport
+  *   with PlayJsonSeekerSupport {
+  *
+  *   object MyAPI extends super.API with SeekImplicits with JsonSeekerImplicits
+  *   override val api: MyAPI = MyAPI
+  * }
   *
   * object MyPostgresProfile extends MyPostgresProfile
   * }}}
   *
-  * Or for a simpler inline setup:
+  * Then use throughout your application with a single import:
   * {{{
-  * import io.github.devnico.slickseeker.SlickSeekerSupport
+  * import MyPostgresProfile.api._
   *
-  * object MyProfile extends slick.jdbc.PostgresProfile with SlickSeekerSupport
-  * }}}
-  *
-  * Then use in your code:
-  * {{{
-  * import MyProfile.api._
-  * import io.github.devnico.slickseeker.playjson._  // If using Play JSON cursors
-  *
-  * // Define your table
-  * class Users(tag: Tag) extends Table[(Int, String, Timestamp)](tag, "users") {
-  *   def id = column[Int]("id", O.PrimaryKey)
-  *   def name = column[String]("name")
-  *   def createdAt = column[Timestamp]("created_at")
-  *   def * = (id, name, createdAt)
-  * }
-  * val users = TableQuery[Users]
-  *
-  * // Create a seeker and paginate
   * val seeker = users.toSeeker
   *   .seek(_.name.asc)
   *   .seek(_.id.asc)
   *
-  * val page: DBIO[PaginatedResult[User]] = seeker.page(
-  *   limit = 10,
-  *   cursor = None  // or Some("cursor-string") for subsequent pages
-  * )
+  * val page = db.run(seeker.page(limit = 20, cursor = None))
   * }}}
   */
 trait SlickSeekerSupport { driver: JdbcProfile =>
-  // Import the profile's API to get all necessary implicits
   import driver.api._
   import ColumnSeekFilterTypes._
 
@@ -212,18 +196,28 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
       }
   }
 
-  // Make all implicits available within this trait
-  object Implicits extends SeekerSortKeyImplicits
+  /** Trait with all core SlickSeeker implicits for column seek operations.
+    *
+    * Mix this into your profile's API object:
+    * {{{
+    * trait MyProfile extends PostgresProfile with SlickSeekerSupport {
+    *   object MyApi extends API with SeekImplicits
+    *   override val api: MyApi.type = MyApi
+    * }
+    * }}}
+    */
+  trait SeekImplicits extends SeekerSortKeyImplicits {
 
-  /** Extension methods for Query to add `.toSeeker` method. */
-  implicit class QuerySeekerOps[E, U](query: lifted.Query[E, U, Seq]) {
-    def toSeeker[CVE](implicit
-        cursorEnvironment: CursorEnvironment[CVE],
-        shape: lifted.Shape[lifted.FlatShapeLevel, E, U, E],
-        baseTypedType: BaseTypedType[Int]
-    ): SlickSeeker[E, U, CVE, lifted.Rep[Int], Int] = SlickSeeker(query)
+    /** Extension methods for Query to add `.toSeeker` method. */
+    implicit class QuerySeekerOps[E, U](query: lifted.Query[E, U, Seq]) {
+      def toSeeker[CVE](implicit
+          cursorEnvironment: CursorEnvironment[CVE],
+          shape: lifted.Shape[lifted.FlatShapeLevel, E, U, E],
+          baseTypedType: BaseTypedType[Int]
+      ): SlickSeeker[E, U, CVE, lifted.Rep[Int], Int] = SlickSeeker(query)
+    }
   }
 
-  // Make the profile available as an implicit for the page method
+  // Make the profile available for the page method
   implicit def jdbcProfile: JdbcProfile = driver
 }

@@ -14,23 +14,23 @@ jobs:
   deploy:
     name: Deploy Documentation
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-      
+
       - name: Install dependencies
         run: pip install -r docs/requirements.txt
-      
+
       - name: Deploy to GitHub Pages
         run: cd docs && mkdocs gh-deploy --force

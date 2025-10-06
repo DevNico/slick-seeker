@@ -22,22 +22,18 @@ Create a custom profile that extends your database profile and mixes in `SlickSe
 ```scala
 import slick.jdbc.PostgresProfile
 import io.github.devnico.slickseeker.SlickSeekerSupport
-import io.github.devnico.slickseeker.playjson._
+import io.github.devnico.slickseeker.playjson.PlayJsonSeekerSupport
 
-// Option 1: Full trait definition (recommended for reusability)
-trait MyPostgresProfile extends PostgresProfile with SlickSeekerSupport {
-  // Define cursor environment inside your profile (like custom DB types)
-  implicit val cursorEnv: CursorEnvironment[JsValue] = 
-    PlayJsonSupport.cursorEnvironment(Base64Decorator())
+trait MyPostgresProfile extends PostgresProfile 
+  with SlickSeekerSupport 
+  with PlayJsonSeekerSupport {
+  
+  object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+  
+  override val api: MyApi.type = MyApi
 }
 
 object MyPostgresProfile extends MyPostgresProfile
-
-// Option 2: Inline object (simpler for single use)
-object MyProfile extends PostgresProfile with SlickSeekerSupport {
-  implicit val cursorEnv: CursorEnvironment[JsValue] = 
-    PlayJsonSupport.cursorEnvironment(Base64Decorator())
-}
 ```
 
 **Why?** This pattern allows Slick Seeker to work with any JDBC profile (PostgreSQL, MySQL, H2, SQLite, Oracle, etc.) without being tied to a specific database. By defining the cursor environment inside your profile, it's available wherever you import the profile API.
@@ -123,7 +119,7 @@ For REST APIs, you can serialize `PaginatedResult` to JSON:
 import io.github.devnico.slickseeker.playjson._
 import play.api.libs.json.Json
 
-given Format[User] = Json.format[User]
+implicit val userFormat = Json.format[User]
 
 val result: PaginatedResult[User] = ???
 val json = Json.toJson(result)

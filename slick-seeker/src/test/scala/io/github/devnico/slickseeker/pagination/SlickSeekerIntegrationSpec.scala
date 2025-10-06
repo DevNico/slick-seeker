@@ -2,12 +2,10 @@ package io.github.devnico.slickseeker.pagination
 
 import io.github.devnico.slickseeker.cursor._
 import io.github.devnico.slickseeker.support.{MyH2Profile, SortDirection}
-import MyH2Profile.cursorEnv
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import MyH2Profile.api._
-import MyH2Profile.Implicits._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
