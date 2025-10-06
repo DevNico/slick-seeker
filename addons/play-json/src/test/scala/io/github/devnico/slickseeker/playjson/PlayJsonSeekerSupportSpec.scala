@@ -8,6 +8,7 @@ import play.api.libs.json._
 import slick.jdbc.H2Profile
 
 class PlayJsonSeekerSupportSpec extends AnyWordSpec with Matchers {
+  case class Person(id: Int, name: String)
 
   "PlayJsonSeekerSupport" should {
 
@@ -40,12 +41,10 @@ class PlayJsonSeekerSupportSpec extends AnyWordSpec with Matchers {
 
       import TestProfile.api._
 
-      case class Person(id: Int, name: String)
       implicit val personFormat: Format[Person] = Json.format[Person]
-
-      val codec  = new TestProfile.JsonCursorValueCodec[Person]
-      val person = Person(1, "Alice")
-      val json   = codec.encode(person)
+      val codec                                 = new TestProfile.JsonCursorValueCodec[Person]
+      val person                                = Person(1, "Alice")
+      val json                                  = codec.encode(person)
 
       (json \ "id").as[Int] shouldBe 1
       (json \ "name").as[String] shouldBe "Alice"
