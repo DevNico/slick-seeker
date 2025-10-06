@@ -176,4 +176,3 @@ val seeker2 = users.toSeeker
 
 - [Core Concepts](concepts.md) - Deep dive into cursor pagination and decorators
 - [Cookbook](cookbook.md) - Real-world examples
-- [API Reference](api.md) - Complete API documentation
