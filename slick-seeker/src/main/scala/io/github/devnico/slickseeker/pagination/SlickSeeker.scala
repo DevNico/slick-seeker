@@ -116,9 +116,8 @@ final case class SlickSeeker[E, U, CVE, C, CU](
     }
   }
 
-  private def encodeCursor(projectedCursor: CU): Vector[CVE] = {
+  private def encodeCursor(projectedCursor: CU): Vector[CVE] =
     qwc.encode(projectedCursor).toVector
-  }
 
   private def buildFilter(
       table: E,
