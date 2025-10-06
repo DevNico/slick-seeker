@@ -60,17 +60,16 @@ libraryDependencies ++= Seq(
     // Step 1: Create a custom profile
     import slick.jdbc.PostgresProfile
     import io.github.devnico.slickseeker.SlickSeekerSupport
-    import io.github.devnico.slickseeker.playjson._
+    import io.github.devnico.slickseeker.playjson.given
 
     trait MyPostgresProfile extends PostgresProfile with SlickSeekerSupport {
       // Define cursor environment inside your profile (like custom DB types)
-      implicit val cursorEnv: CursorEnvironment[JsValue] = 
-        PlayJsonSupport.cursorEnvironment(Base64Decorator())
+      given CursorEnvironment[JsValue] = PlayJsonSupport.cursorEnvironment(Base64Decorator())
     }
     object MyPostgresProfile extends MyPostgresProfile
 
     // Step 2: Import your profile API
-    import MyPostgresProfile.api._
+    import MyPostgresProfile.api.*
 
     // Step 3: Define your table
     case class User(id: Int, name: String, email: String)
@@ -146,7 +145,6 @@ libraryDependencies ++= Seq(
 - [Quick Start](quickstart.md) - Get up and running in 5 minutes
 - [Core Concepts](concepts.md) - Understand cursor pagination and decorators
 - [Cookbook](cookbook.md) - Real-world examples and patterns
-- [API Reference](api.md) - Complete API documentation
 
 ## Requirements
 

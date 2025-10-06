@@ -49,7 +49,6 @@ nav:
   - 'Quick Start': 'quickstart.md'
   - 'Core Concepts': 'concepts.md'
   - 'Cookbook': 'cookbook.md'
-  - 'API Reference': 'api.md'
 
 markdown_extensions:
   - admonition

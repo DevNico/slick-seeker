@@ -37,7 +37,6 @@ Full documentation: https://devnico.github.io/slick-seeker
 - [Quick Start](https://devnico.github.io/slick-seeker/quickstart/)
 - [Core Concepts](https://devnico.github.io/slick-seeker/concepts/)
 - [Cookbook](https://devnico.github.io/slick-seeker/cookbook/)
-- [API Reference](https://devnico.github.io/slick-seeker/api/)
 
 ## Usage
 

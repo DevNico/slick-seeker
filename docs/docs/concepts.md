@@ -23,9 +23,9 @@ ORDER BY name, id
 LIMIT 20;
 ```
 
-## seek() - Automatic Extraction
+## seek()
 
-Use `seek()` for direct column references. The cursor value is automatically extracted from query results.
+Use `seek()` for direct column references.
 
 ```scala
 // Direct columns - automatic extraction
@@ -38,13 +38,14 @@ Works with:
 - Table columns: `_.name`, `_.email`
 - Tuple fields: `_._1`, `_._2`
 - Nested tuples: `_._1._2`
+- Any computed column: `_.name.toLowerCase`
 
 The SQL looks like:
 
 ```sql
 SELECT t.*, t.name, t.id  -- Cursor columns added automatically
 FROM users t
-WHERE (t.name, t.id) > (?, ?)
+WHERE t.name > ? OR (t.name = ? AND t.id > ?)
 ORDER BY t.name ASC, t.id ASC
 LIMIT 20
 ```
@@ -250,7 +251,7 @@ Decorators are useful for:
 - **Encryption** - Hide cursor content
 - **Signing** - Prevent tampering
 
-## Performance Tips
+## Tips
 
 ### 1. Always Include a Unique Column
 
@@ -274,33 +275,3 @@ CREATE INDEX idx_tasks_status_priority_id ON tasks(status, priority, id);
 ### 3. Limit Sort Columns
 
 Each sort column adds to the WHERE clause complexity. Use 2-4 columns typically.
-
-## Type Safety
-
-Slick Seeker leverages Scala 3's type system for compile-time safety:
-
-```scala
-// Compile error: Type mismatch
-.seek(_.name)
-.seek(_.age)
-// ^ Can't compare String cursor with Int column
-
-// OK: Types match
-.seek(_.name)  // String
-.seek(_.id)    // Int
-```
-
-The cursor type accumulates as you add columns:
-
-```scala
-// Type: SlickSeeker[E, U, CVE, Rep[Int], Int]
-users.toSeeker
-
-// Type: SlickSeeker[E, U, CVE, (Rep[String], Rep[Int]), (String, Int)]
-  .seek(_.name)
-
-// Type: SlickSeeker[E, U, CVE, (Rep[Int], (Rep[String], Rep[Int])), (Int, (String, Int))]
-  .seek(_.id)
-```
-
-This guarantees cursor values match your sort columns.
