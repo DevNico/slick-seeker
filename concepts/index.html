@@ -297,25 +297,6 @@
   
 
       
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../api/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  API Reference
-
-      </a>
-    </li>
-  
-
-      
     </ul>
   </div>
 </nav>
@@ -494,9 +475,9 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#seek-automatic-extraction" class="md-nav__link">
+  <a href="#seek" class="md-nav__link">
     <span class="md-ellipsis">
-      seek() - Automatic Extraction
+      seek()
     </span>
   </a>
   
@@ -593,13 +574,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#performance-tips" class="md-nav__link">
+  <a href="#tips" class="md-nav__link">
     <span class="md-ellipsis">
-      Performance Tips
+      Tips
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Performance Tips">
+    <nav class="md-nav" aria-label="Tips">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -634,15 +615,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#type-safety" class="md-nav__link">
-    <span class="md-ellipsis">
-      Type Safety
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -664,28 +636,6 @@
   
   <span class="md-ellipsis">
     Cookbook
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../api/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    API Reference
     
   </span>
   
@@ -734,8 +684,8 @@
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">id</span><span class="w"> </span>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="k">LIMIT</span><span class="w"> </span><span class="mi">20</span><span class="p">;</span>
 </span></code></pre></div>
-<h2 id="seek-automatic-extraction">seek() - Automatic Extraction</h2>
-<p>Use <code>seek()</code> for direct column references. The cursor value is automatically extracted from query results.</p>
+<h2 id="seek">seek()</h2>
+<p>Use <code>seek()</code> for direct column references.</p>
 <div class="language-scala highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1">// Direct columns - automatic extraction</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kd">val</span><span class="w"> </span><span class="n">seeker</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">users</span><span class="p">.</span><span class="n">toSeeker</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">name</span><span class="p">.</span><span class="n">asc</span><span class="p">)</span>
@@ -744,11 +694,12 @@
 <p>Works with:
 - Table columns: <code>_.name</code>, <code>_.email</code>
 - Tuple fields: <code>_._1</code>, <code>_._2</code>
-- Nested tuples: <code>_._1._2</code></p>
+- Nested tuples: <code>_._1._2</code>
+- Any computed column: <code>_.name.toLowerCase</code></p>
 <p>The SQL looks like:</p>
 <div class="language-sql highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">SELECT</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">id</span><span class="w">  </span><span class="c1">-- Cursor columns added automatically</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">FROM</span><span class="w"> </span><span class="n">users</span><span class="w"> </span><span class="n">t</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="k">WHERE</span><span class="w"> </span><span class="p">(</span><span class="n">t</span><span class="p">.</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="p">(</span><span class="o">?</span><span class="p">,</span><span class="w"> </span><span class="o">?</span><span class="p">)</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="k">WHERE</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">name</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="k">OR</span><span class="w"> </span><span class="p">(</span><span class="n">t</span><span class="p">.</span><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">id</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="o">?</span><span class="p">)</span>
 </span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">name</span><span class="w"> </span><span class="k">ASC</span><span class="p">,</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">id</span><span class="w"> </span><span class="k">ASC</span>
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="k">LIMIT</span><span class="w"> </span><span class="mi">20</span>
 </span></code></pre></div>
@@ -917,7 +868,7 @@
 - <strong>Compression</strong> - Reduce cursor size
 - <strong>Encryption</strong> - Hide cursor content
 - <strong>Signing</strong> - Prevent tampering</p>
-<h2 id="performance-tips">Performance Tips</h2>
+<h2 id="tips">Tips</h2>
 <h3 id="1-always-include-a-unique-column">1. Always Include a Unique Column</h3>
 <div class="language-scala highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1">// BAD: Non-unique sort can miss items</span>
 </span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">status</span><span class="p">)</span>
@@ -933,28 +884,6 @@
 </span></code></pre></div>
 <h3 id="3-limit-sort-columns">3. Limit Sort Columns</h3>
 <p>Each sort column adds to the WHERE clause complexity. Use 2-4 columns typically.</p>
-<h2 id="type-safety">Type Safety</h2>
-<p>Slick Seeker leverages Scala 3's type system for compile-time safety:</p>
-<div class="language-scala highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1">// Compile error: Type mismatch</span>
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">name</span><span class="p">)</span>
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">age</span><span class="p">)</span>
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1">// ^ Can&#39;t compare String cursor with Int column</span>
-</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>
-</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="c1">// OK: Types match</span>
-</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">name</span><span class="p">)</span><span class="w">  </span><span class="c1">// String</span>
-</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">id</span><span class="p">)</span><span class="w">    </span><span class="c1">// Int</span>
-</span></code></pre></div>
-<p>The cursor type accumulates as you add columns:</p>
-<div class="language-scala highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1">// Type: SlickSeeker[E, U, CVE, Rep[Int], Int]</span>
-</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="n">users</span><span class="p">.</span><span class="n">toSeeker</span>
-</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
-</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="c1">// Type: SlickSeeker[E, U, CVE, (Rep[String], Rep[Int]), (String, Int)]</span>
-</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">name</span><span class="p">)</span>
-</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>
-</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="c1">// Type: SlickSeeker[E, U, CVE, (Rep[Int], (Rep[String], Rep[Int])), (Int, (String, Int))]</span>
-</span><span id="__span-17-8"><a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">id</span><span class="p">)</span>
-</span></code></pre></div>
-<p>This guarantees cursor values match your sort columns.</p>
 
 
 
