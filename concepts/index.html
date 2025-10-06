@@ -691,11 +691,13 @@
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">name</span><span class="p">.</span><span class="n">asc</span><span class="p">)</span>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">id</span><span class="p">.</span><span class="n">asc</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Works with:
-- Table columns: <code>_.name</code>, <code>_.email</code>
-- Tuple fields: <code>_._1</code>, <code>_._2</code>
-- Nested tuples: <code>_._1._2</code>
-- Any computed column: <code>_.name.toLowerCase</code></p>
+<p>Works with:</p>
+<ul>
+<li>Table columns: <code>_.name</code>, <code>_.email</code></li>
+<li>Tuple fields: <code>_._1</code>, <code>_._2</code></li>
+<li>Nested tuples: <code>_._1._2</code></li>
+<li>Any computed column: <code>_.name.toLowerCase</code></li>
+</ul>
 <p>The SQL looks like:</p>
 <div class="language-sql highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">SELECT</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">id</span><span class="w">  </span><span class="c1">-- Cursor columns added automatically</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">FROM</span><span class="w"> </span><span class="n">users</span><span class="w"> </span><span class="n">t</span>
@@ -802,13 +804,17 @@
 </span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="kd">val</span><span class="w"> </span><span class="n">backToPage1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">seeker</span><span class="p">.</span><span class="n">page</span><span class="p">(</span><span class="n">limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="n">cursor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">page2</span><span class="p">.</span><span class="n">prevCursor</span><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="how-it-works_1">How It Works</h3>
-<p>Cursors encode direction:
-- Forward: <code>&gt;</code> prefix
-- Backward: <code>&lt;</code> prefix</p>
-<p>For backward pagination:
-1. Sort order is reversed
-2. Results are retrieved
-3. Results are reversed back to original order</p>
+<p>Cursors encode direction:</p>
+<ul>
+<li>Forward: <code>&gt;</code> prefix</li>
+<li>Backward: <code>&lt;</code> prefix</li>
+</ul>
+<p>For backward pagination:</p>
+<ol>
+<li>Sort order is reversed</li>
+<li>Results are retrieved</li>
+<li>Results are reversed back to original order</li>
+</ol>
 <p>This ensures consistent ordering regardless of direction.</p>
 <h2 id="cursor-environment">Cursor Environment</h2>
 <p>The cursor environment controls how cursors are encoded. Define it inside your profile:</p>
@@ -821,9 +827,11 @@
 </span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">  </span><span class="k">override</span><span class="w"> </span><span class="kd">val</span><span class="w"> </span><span class="n">api</span><span class="p">:</span><span class="w"> </span><span class="nc">MyApi</span><span class="p">.</span><span class="k">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">MyApi</span>
 </span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="p">}</span>
 </span></code></pre></div>
-<p>Components:
-- <strong>Codec</strong>: Serializes values (e.g., JSON)
-- <strong>Decorator</strong>: Transforms final string (e.g., Base64)</p>
+<p>Components:</p>
+<ul>
+<li><strong>Codec</strong>: Serializes values (e.g., JSON)</li>
+<li><strong>Decorator</strong>: Transforms final string (e.g., Base64)</li>
+</ul>
 <h2 id="decorators">Decorators</h2>
 <p>Decorators transform cursor strings. Chain them for multiple transformations:</p>
 <div class="language-scala highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">trait</span><span class="w"> </span><span class="nc">MyProfile</span><span class="w"> </span><span class="k">extends</span><span class="w"> </span><span class="nc">PostgresProfile</span><span class="w"> </span>
@@ -869,11 +877,13 @@
 </span><span id="__span-13-27"><a id="__codelineno-13-27" name="__codelineno-13-27" href="#__codelineno-13-27"></a><span class="w">  </span><span class="k">override</span><span class="w"> </span><span class="kd">val</span><span class="w"> </span><span class="n">api</span><span class="p">:</span><span class="w"> </span><span class="nc">MyApi</span><span class="p">.</span><span class="k">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">MyApi</span>
 </span><span id="__span-13-28"><a id="__codelineno-13-28" name="__codelineno-13-28" href="#__codelineno-13-28"></a><span class="p">}</span>
 </span></code></pre></div>
-<p>Decorators are useful for:
-- <strong>Base64</strong> - URL-safe encoding
-- <strong>Compression</strong> - Reduce cursor size
-- <strong>Encryption</strong> - Hide cursor content
-- <strong>Signing</strong> - Prevent tampering</p>
+<p>Decorators are useful for:</p>
+<ul>
+<li><strong>Base64</strong> - URL-safe encoding</li>
+<li><strong>Compression</strong> - Reduce cursor size</li>
+<li><strong>Encryption</strong> - Hide cursor content</li>
+<li><strong>Signing</strong> - Prevent tampering</li>
+</ul>
 <h2 id="tips">Tips</h2>
 <h3 id="1-always-include-a-unique-column">1. Always Include a Unique Column</h3>
 <div class="language-scala highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1">// BAD: Non-unique sort can miss/duplicate items</span>

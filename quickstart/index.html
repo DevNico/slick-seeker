@@ -674,11 +674,13 @@
 <div class="language-scala highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1">// Import your custom profile API</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">import</span><span class="w"> </span><span class="nc">MyPostgresProfile</span><span class="p">.</span><span class="nn">api</span><span class="p">.</span><span class="n">_</span>
 </span></code></pre></div>
-<p>This provides:
-- All Slick query methods (<code>filter</code>, <code>sortBy</code>, <code>map</code>, etc.)
-- Slick Seeker's <code>.toSeeker</code> extension method
-- All necessary type classes and implicits
-- Your cursor environment</p>
+<p>This provides:</p>
+<ul>
+<li>All Slick query methods (<code>filter</code>, <code>sortBy</code>, <code>map</code>, etc.)</li>
+<li>Slick Seeker's <code>.toSeeker</code> extension method</li>
+<li>All necessary type classes and implicits</li>
+<li>Your cursor environment</li>
+</ul>
 <h3 id="step-3-define-your-table">Step 3: Define Your Table</h3>
 <div class="language-scala highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">case</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">User</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="nc">Int</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="nc">String</span><span class="p">,</span><span class="w"> </span><span class="n">email</span><span class="p">:</span><span class="w"> </span><span class="nc">String</span><span class="p">,</span><span class="w"> </span><span class="n">active</span><span class="p">:</span><span class="w"> </span><span class="nc">Boolean</span><span class="p">)</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>

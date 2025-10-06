@@ -582,10 +582,12 @@
 <div class="language-sql highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1">-- Page 1000: Database must scan and skip 19,900 rows!</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">SELECT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">users</span><span class="w"> </span><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="k">LIMIT</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="k">OFFSET</span><span class="w"> </span><span class="mi">19900</span><span class="p">;</span>
 </span></code></pre></div>
-<p>Problems:
-- Slow for deep pages (O(n) where n = offset)
-- Unstable with concurrent writes (items shift between pages)
-- Memory intensive for large offsets</p>
+<p>Problems:</p>
+<ul>
+<li>Slow for deep pages (O(n) where n = offset)</li>
+<li>Unstable with concurrent writes (items shift between pages)</li>
+<li>Memory intensive for large offsets</li>
+</ul>
 <p>Cursor-based pagination (keyset pagination) solves this:</p>
 <div class="language-sql highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1">-- Any page: Fast index-based lookup!</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">SELECT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">users</span>
@@ -593,10 +595,12 @@
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">id</span><span class="w"> </span>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="k">LIMIT</span><span class="w"> </span><span class="mi">100</span><span class="p">;</span>
 </span></code></pre></div>
-<p>Benefits:
-- Constant O(1) performance for any page
-- Stable with concurrent writes
-- Efficient index usage</p>
+<p>Benefits:</p>
+<ul>
+<li>Constant O(1) performance for any page</li>
+<li>Stable with concurrent writes</li>
+<li>Efficient index usage</li>
+</ul>
 <h2 id="installation">Installation</h2>
 <p>Add to your <code>build.sbt</code>:</p>
 <div class="language-scala highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">libraryDependencies</span><span class="w"> </span><span class="o">++=</span><span class="w"> </span><span class="nc">Seq</span><span class="p">(</span>
