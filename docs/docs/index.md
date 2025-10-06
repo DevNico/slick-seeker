@@ -30,8 +30,8 @@ Cursor-based pagination (keyset pagination) solves this:
 
 ```sql
 -- Any page: Fast index-based lookup!
-SELECT * FROM users 
-WHERE (name, id) > ('last_name', last_id)
+SELECT * FROM users
+WHERE name > 'last_name' OR (name = 'last_name' AND id > last_id)
 ORDER BY name, id 
 LIMIT 100;
 ```
