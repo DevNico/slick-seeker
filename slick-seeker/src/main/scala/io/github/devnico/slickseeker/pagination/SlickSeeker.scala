@@ -41,7 +41,7 @@ final case class SlickSeeker[E, U, CVE, C, CU](
       profile: Profile,
       cursorEnvironment: CursorEnvironment[CVE],
       ec: ExecutionContext
-  ): profile.api.DBIO[PaginatedResult[U]] = {
+  ): profile.api.DBIOAction[PaginatedResult[U], profile.api.NoStream, profile.api.Effect.Read] = {
     // Explicitly import the api to make implicits available
     val theApi = profile.api
     import theApi._
@@ -55,7 +55,7 @@ final case class SlickSeeker[E, U, CVE, C, CU](
     val normalizedLimit = limit.max(1).min(maxLimit)
 
     // Scala 2 workaround: map the length to a single-value query
-    val totalAction: DBIO[Int] = {
+    val totalAction: DBIOAction[Int, NoStream, Effect.Read] = {
       val countQuery = baseQuery.map(_ => 1).length // This returns Rep[Int]
       // Wrap it in a Query by using a single-value query
       val wrappedQuery = Query(countQuery)
@@ -63,7 +63,7 @@ final case class SlickSeeker[E, U, CVE, C, CU](
       ext.result.map(_.head)
     }
 
-    val resultsAction: DBIO[Seq[(U, CU)]] = {
+    val resultsAction: DBIOAction[Seq[(U, CU)], NoStream, Effect.Read] = {
       val filtered  = baseQuery.filter(buildFilter(_, queryColumns, rawCursor))
       val sorted    = filtered.sortBy(buildOrdered(_, queryColumns))
       val limited   = sorted.take(normalizedLimit + 1)
