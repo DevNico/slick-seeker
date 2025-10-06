@@ -49,12 +49,12 @@ import slick.jdbc.PostgresProfile
 import io.github.devnico.slickseeker.SlickSeekerSupport
 import io.github.devnico.slickseeker.playjson.PlayJsonSeekerSupport
 
-trait MyPostgresProfile extends PostgresProfile 
-  with SlickSeekerSupport 
+trait MyPostgresProfile extends PostgresProfile
+  with SlickSeekerSupport
   with PlayJsonSeekerSupport {
-  
+
   object MyApi extends API with SeekImplicits with JsonSeekerImplicits
-  
+
   override val api: MyApi.type = MyApi
 }
 
@@ -101,8 +101,8 @@ import io.github.devnico.slickseeker.SlickSeekerSupport
 import io.github.devnico.slickseeker.playjson.PlayJsonSeekerSupport
 
 // PostgreSQL
-trait MyPostgresProfile extends slick.jdbc.PostgresProfile 
-  with SlickSeekerSupport 
+trait MyPostgresProfile extends slick.jdbc.PostgresProfile
+  with SlickSeekerSupport
   with PlayJsonSeekerSupport {
   object MyApi extends API with SeekImplicits with JsonSeekerImplicits
   override val api: MyApi.type = MyApi
@@ -110,8 +110,8 @@ trait MyPostgresProfile extends slick.jdbc.PostgresProfile
 object MyPostgresProfile extends MyPostgresProfile
 
 // MySQL
-trait MyMySQLProfile extends slick.jdbc.MySQLProfile 
-  with SlickSeekerSupport 
+trait MyMySQLProfile extends slick.jdbc.MySQLProfile
+  with SlickSeekerSupport
   with PlayJsonSeekerSupport {
   object MyApi extends API with SeekImplicits with JsonSeekerImplicits
   override val api: MyApi.type = MyApi
@@ -119,8 +119,8 @@ trait MyMySQLProfile extends slick.jdbc.MySQLProfile
 object MyMySQLProfile extends MyMySQLProfile
 
 // H2
-trait MyH2Profile extends slick.jdbc.H2Profile 
-  with SlickSeekerSupport 
+trait MyH2Profile extends slick.jdbc.H2Profile
+  with SlickSeekerSupport
   with PlayJsonSeekerSupport {
   object MyApi extends API with SeekImplicits with JsonSeekerImplicits
   override val api: MyApi.type = MyApi
@@ -158,4 +158,3 @@ val seeker = users.toSeeker
   .seek(_.lastLogin.asc.nullsLast) // NULLs appear at the end
   .seek(_.id.asc)
 ```
-

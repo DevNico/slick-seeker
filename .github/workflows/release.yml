@@ -9,30 +9,30 @@ jobs:
   publish:
     name: Publish to Maven Central
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: coursier/cache-action@v6
-      
+
       - uses: coursier/setup-action@v1
         with:
           jvm: temurin:21
           apps: sbt
-      
+
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@v6
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
-      
+
       - name: Publish
         run: sbt +publishSigned
         env:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
           PGP_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      
+
       - name: Release
         run: sbt sonatypeBundleRelease
         env:
@@ -48,7 +48,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:

@@ -22,7 +22,7 @@ import scala.util.Try
   *   with PlayJsonSeekerSupport {
   *
   *   object MyApi extends API with SeekImplicits with JsonSeekerImplicits
-  *   
+  *
   *   override val api: MyApi.type = MyApi
   * }
   *
@@ -72,12 +72,12 @@ trait PlayJsonSeekerSupport { driver: JdbcProfile =>
     *
     * Example:
     * {{{
-    * trait MyProfile extends PostgresProfile 
-    *   with SlickSeekerSupport 
+    * trait MyProfile extends PostgresProfile
+    *   with SlickSeekerSupport
     *   with PlayJsonSeekerSupport {
-    *   
+    *
     *   object MyApi extends API with SeekImplicits with JsonSeekerImplicits
-    *   
+    *
     *   override val api: MyApi.type = MyApi
     * }
     * }}}

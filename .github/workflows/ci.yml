@@ -14,56 +14,56 @@ jobs:
   format-check:
     name: Check Formatting
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: coursier/setup-action@v1
         with:
           apps: scalafmt
-      
+
       - name: Check formatting
         run: scalafmt --check
 
   test:
     name: Test (Scala ${{ matrix.scala }} - Java ${{ matrix.java }})
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
         java: ['11', '17', '21', '25']
         scala: ['2.13.16', '3.3.5']
       fail-fast: false
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: coursier/cache-action@v6
-      
+
       - uses: coursier/setup-action@v1
         with:
           jvm: temurin:${{ matrix.java }}
           apps: sbt
-      
+
       - name: Compile
         run: sbt ++${{ matrix.scala }} compile
-      
+
       - name: Run tests
         run: sbt ++${{ matrix.scala }} test
 
   docs:
     name: Check Documentation
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         run: pip install -r docs/requirements.txt
-      
+
       - name: Build documentation
         run: cd docs && mkdocs build --strict
