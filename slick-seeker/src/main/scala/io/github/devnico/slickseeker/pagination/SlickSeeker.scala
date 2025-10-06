@@ -17,11 +17,11 @@ final case class SlickSeeker[E, U, CVE, C, CU](
   import ColumnSeekFilterTypes._
   import SlickSeeker._
 
-  def seek[T](col: E => lifted.ColumnOrdered[T])(implicit
-      sk: SeekerSortKey[T, CVE]
-  ): SlickSeeker[E, U, CVE, (lifted.Rep[sk.Key], C), (sk.Key, CU)] =
+  def seek[T, K](col: E => lifted.ColumnOrdered[T])(implicit
+      sk: SeekerSortKey[T, K, CVE]
+  ): SlickSeeker[E, U, CVE, (lifted.Rep[K], C), (K, CU)] =
     copy(
-      columns = columns :+ SeekColumn[E, U, sk.Key, CVE](
+      columns = columns :+ SeekColumn[E, U, K, CVE](
         t => sk.mapCol(col(t)),
         sk.filter,
         sk.codec

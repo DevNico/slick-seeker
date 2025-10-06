@@ -14,10 +14,10 @@ final case class QueryWithCursor[E, U, C, CU, CVE](
     cShape: Shape[FlatShapeLevel, C, CU, C]
 ) {
 
-  def withSeekColumn[T](col: E => ColumnOrdered[T])(implicit
-      sk: SeekerSortKey[T, CVE]
-  ): QueryWithCursor[E, U, (Rep[sk.Key], C), (sk.Key, CU), CVE] = {
-    implicit val shape: Shape[FlatShapeLevel, Rep[sk.Key], sk.Key, Rep[sk.Key]] = sk.shape
+  def withSeekColumn[T, K](col: E => ColumnOrdered[T])(implicit
+      sk: SeekerSortKey[T, K, CVE]
+  ): QueryWithCursor[E, U, (Rep[K], C), (K, CU), CVE] = {
+    implicit val shape: Shape[FlatShapeLevel, Rep[K], K, Rep[K]] = sk.shape
     QueryWithCursor(
       e => (sk.mapCol(col(e)).column, toCursor(e)),
       { case (h, t) => encode(t) :+ sk.codec.encode(h) }

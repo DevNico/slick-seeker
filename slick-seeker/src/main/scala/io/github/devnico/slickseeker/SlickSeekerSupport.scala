@@ -105,14 +105,13 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
         btt: BaseTypedType[T],
         csf: ColumnSeekFilter[T],
         cvc: CursorValueCodec[T, CVE]
-    ): SeekerSortKey[T, CVE] =
-      new SeekerSortKey[T, CVE] {
-        type Key = T
-        def mapCol(col: lifted.ColumnOrdered[T]): lifted.ColumnOrdered[Key] = col
-        def shape: lifted.Shape[lifted.FlatShapeLevel, lifted.Rep[Key], Key, lifted.Rep[Key]] =
+    ): SeekerSortKey[T, T, CVE] =
+      new SeekerSortKey[T, T, CVE] {
+        def mapCol(col: lifted.ColumnOrdered[T]): lifted.ColumnOrdered[T] = col
+        def shape: lifted.Shape[lifted.FlatShapeLevel, lifted.Rep[T], T, lifted.Rep[T]] =
           lifted.Shape.repColumnShape[T, lifted.FlatShapeLevel](using btt)
-        def filter: ColumnSeekFilter[T]       = csf
-        def codec: CursorValueCodec[Key, CVE] = cvc
+        def filter: ColumnSeekFilter[T]     = csf
+        def codec: CursorValueCodec[T, CVE] = cvc
       }
 
     // Identity mapping for Option types
@@ -121,13 +120,13 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
         csf: ColumnSeekFilter[Option[T]],
         cvc: CursorValueCodec[Option[T], CVE],
         optShape: lifted.Shape[lifted.FlatShapeLevel, lifted.Rep[Option[T]], Option[T], lifted.Rep[Option[T]]]
-    ): SeekerSortKey[Option[T], CVE] =
-      new SeekerSortKey[Option[T], CVE] {
-        type Key = Option[T]
-        def mapCol(c: lifted.ColumnOrdered[Option[T]]): lifted.ColumnOrdered[Key]             = c
-        def shape: lifted.Shape[lifted.FlatShapeLevel, lifted.Rep[Key], Key, lifted.Rep[Key]] = optShape
-        def filter: ColumnSeekFilter[Option[T]]                                               = csf
-        def codec: CursorValueCodec[Option[T], CVE]                                           = cvc
+    ): SeekerSortKey[Option[T], Option[T], CVE] =
+      new SeekerSortKey[Option[T], Option[T], CVE] {
+        def mapCol(c: lifted.ColumnOrdered[Option[T]]): lifted.ColumnOrdered[Option[T]] = c
+        def shape: lifted.Shape[lifted.FlatShapeLevel, lifted.Rep[Option[T]], Option[T], lifted.Rep[Option[T]]] =
+          optShape
+        def filter: ColumnSeekFilter[Option[T]]     = csf
+        def codec: CursorValueCodec[Option[T], CVE] = cvc
       }
   }
 
@@ -139,11 +138,9 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
         btt: BaseTypedType[T],
         csf: ColumnSeekFilter[Int],
         cvc: CursorValueCodec[Int, CVE]
-    ): SeekerSortKey[T, CVE] =
-      new SeekerSortKey[T, CVE] {
-        type Key = Int
-
-        def mapCol(c: lifted.ColumnOrdered[T]): lifted.ColumnOrdered[Key] = {
+    ): SeekerSortKey[T, Int, CVE] =
+      new SeekerSortKey[T, Int, CVE] {
+        def mapCol(c: lifted.ColumnOrdered[T]): lifted.ColumnOrdered[Int] = {
           val vs = order.orderedValues
           require(vs.nonEmpty, "SeekOrder: empty domain")
           val head                                 = vs.head
@@ -157,13 +154,13 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
           lifted.ColumnOrdered(rep, c.ord)
         }
 
-        def shape: lifted.Shape[lifted.FlatShapeLevel, lifted.Rep[Key], Key, lifted.Rep[Key]] = {
+        def shape: lifted.Shape[lifted.FlatShapeLevel, lifted.Rep[Int], Int, lifted.Rep[Int]] = {
           val intType = intBaseType
           lifted.Shape.repColumnShape[Int, lifted.FlatShapeLevel](using intType)
         }
 
         def filter: ColumnSeekFilter[Int]     = csf
-        def codec: CursorValueCodec[Key, CVE] = cvc
+        def codec: CursorValueCodec[Int, CVE] = cvc
       }
 
     // Custom ordering for Option types
@@ -172,11 +169,9 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
         btt: BaseTypedType[T],
         csf: ColumnSeekFilter[Int],
         cvc: CursorValueCodec[Int, CVE]
-    ): SeekerSortKey[Option[T], CVE] =
-      new SeekerSortKey[Option[T], CVE] {
-        type Key = Int
-
-        def mapCol(c: lifted.ColumnOrdered[Option[T]]): lifted.ColumnOrdered[Key] = {
+    ): SeekerSortKey[Option[T], Int, CVE] =
+      new SeekerSortKey[Option[T], Int, CVE] {
+        def mapCol(c: lifted.ColumnOrdered[Option[T]]): lifted.ColumnOrdered[Int] = {
           val vs                                   = order.orderedValues
           val head                                 = vs.head
           implicit val intType: BaseTypedType[Int] = intBaseType
@@ -189,13 +184,13 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
           lifted.ColumnOrdered(rep, c.ord)
         }
 
-        def shape: lifted.Shape[lifted.FlatShapeLevel, lifted.Rep[Key], Key, lifted.Rep[Key]] = {
+        def shape: lifted.Shape[lifted.FlatShapeLevel, lifted.Rep[Int], Int, lifted.Rep[Int]] = {
           val intType = intBaseType
           lifted.Shape.repColumnShape[Int, lifted.FlatShapeLevel](using intType)
         }
 
         def filter: ColumnSeekFilter[Int]     = csf
-        def codec: CursorValueCodec[Key, CVE] = cvc
+        def codec: CursorValueCodec[Int, CVE] = cvc
       }
   }
 

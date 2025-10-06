@@ -37,7 +37,7 @@ package object slickseeker {
   type SeekOrder[T] = filter.SeekOrder[T]
   val SeekOrder: filter.SeekOrder.type = filter.SeekOrder
 
-  type SeekerSortKey[T, CVE] = filter.SeekerSortKey[T, CVE]
+  type SeekerSortKey[T, K, CVE] = filter.SeekerSortKey[T, K, CVE]
   val SeekerSortKey: filter.SeekerSortKey.type = filter.SeekerSortKey
 
   type ColumnSeekFilter[T] = filter.ColumnSeekFilter[T]

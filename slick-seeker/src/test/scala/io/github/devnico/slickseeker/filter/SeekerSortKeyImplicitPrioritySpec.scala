@@ -112,7 +112,7 @@ class SeekerSortKeyImplicitPrioritySpec extends AnyWordSpec with Matchers {
     "compile without ambiguous implicit errors when SeekOrder exists" in {
       // Should resolve to seekerSortKeyOrder (higher priority, defined in SeekerSortKeyImplicits)
       // not seekerSortKeyIdentity (lower priority, defined in SeekerSortKeyLowPriorityImplicits)
-      val sk = implicitly[SeekerSortKey[Priority, String]]
+      val sk = implicitly[SeekerSortKey[Priority, Int, String]]
 
       sk should not be null
       info("Successfully resolved SeekerSortKey[Priority, String] without ambiguity")
@@ -120,8 +120,8 @@ class SeekerSortKeyImplicitPrioritySpec extends AnyWordSpec with Matchers {
 
     "work with multiple SeekOrder types without conflicts" in {
       // Both should resolve without ambiguity
-      val prioritySk = implicitly[SeekerSortKey[Priority, String]]
-      val statusSk   = implicitly[SeekerSortKey[Status, String]]
+      val prioritySk = implicitly[SeekerSortKey[Priority, Int, String]]
+      val statusSk   = implicitly[SeekerSortKey[Status, Int, String]]
 
       prioritySk should not be null
       statusSk should not be null
@@ -153,7 +153,7 @@ class SeekerSortKeyImplicitPrioritySpec extends AnyWordSpec with Matchers {
 
     "handle Option types with SeekOrder" in {
       // Verify that Option[T] with SeekOrder[T] also works correctly
-      val sk = implicitly[SeekerSortKey[Option[Priority], String]]
+      val sk = implicitly[SeekerSortKey[Option[Priority], Int, String]]
 
       sk should not be null
       info("Option type with SeekOrder resolved correctly")
@@ -165,7 +165,7 @@ class SeekerSortKeyImplicitPrioritySpec extends AnyWordSpec with Matchers {
 
     "use identity mapping for regular types" in {
       // For types without SeekOrder, should use seekerSortKeyIdentity
-      val sk = implicitly[SeekerSortKey[String, String]]
+      val sk = implicitly[SeekerSortKey[String, String, String]]
 
       sk should not be null
       info("String type without SeekOrder uses identity mapping")
@@ -178,7 +178,7 @@ class SeekerSortKeyImplicitPrioritySpec extends AnyWordSpec with Matchers {
     "use seekerSortKeyOrder for types with SeekOrder" in {
       // When SeekOrder[Priority] exists, should use seekerSortKeyOrder
       // which maps Priority to Int (not identity mapping to Priority)
-      val sk = implicitly[SeekerSortKey[Priority, String]]
+      val sk = implicitly[SeekerSortKey[Priority, Int, String]]
 
       // The key characteristic of seekerSortKeyOrder is that it uses Int as the Key type
       // We can verify by checking the codec can decode integer strings
@@ -195,7 +195,7 @@ class SeekerSortKeyImplicitPrioritySpec extends AnyWordSpec with Matchers {
     "use seekerSortKeyIdentity for types without SeekOrder" in {
       // String has no SeekOrder, so should use seekerSortKeyIdentity
       // which maps String to String (identity mapping)
-      val sk = implicitly[SeekerSortKey[String, String]]
+      val sk = implicitly[SeekerSortKey[String, String, String]]
 
       // The codec should work with String values
       val decoded = sk.codec.decode("hello")
@@ -209,7 +209,7 @@ class SeekerSortKeyImplicitPrioritySpec extends AnyWordSpec with Matchers {
     }
 
     "prefer higher priority implicit when both could apply" in {
-      val sk = implicitly[SeekerSortKey[Priority, String]]
+      val sk = implicitly[SeekerSortKey[Priority, Int, String]]
 
       // If we got seekerSortKeyOrder, the codec should work with integer string representations
       // If we got seekerSortKeyIdentity, it would fail with Priority-based encoding
