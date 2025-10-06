@@ -1,0 +1,3 @@
+# Routes
+GET     /api/users                  controllers.UserController.listUsers(limit: Option[Int], cursor: Option[String])
+GET     /api/users/:id              controllers.UserController.getUser(id: Long)
