@@ -1,0 +1,6 @@
+addSbtPlugin("org.scalameta"  % "sbt-scalafmt"    % "2.5.2")
+addSbtPlugin("com.github.sbt" % "sbt-ci-release"  % "1.9.3")
+addSbtPlugin("org.scoverage"  % "sbt-scoverage"   % "2.0.12")
+addSbtPlugin("com.typesafe"   % "sbt-mima-plugin" % "1.1.3")
+addSbtPlugin("org.xerial.sbt" % "sbt-sonatype"    % "3.12.2")
+addSbtPlugin("com.github.sbt" % "sbt-pgp"         % "2.1.2")

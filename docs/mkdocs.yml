@@ -1,0 +1,91 @@
+site_name: 'Slick Seeker'
+repo_url: https://github.com/DevNico/slick-seeker
+edit_uri: edit/main/docs/docs/
+docs_dir: 'docs'
+site_dir: '../site'
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - content.action.edit
+    - content.code.copy
+    - content.code.select
+    - content.tooltips
+    - navigation.expand
+    - navigation.footer
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.path
+    - navigation.sections
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - search.highlight
+    - search.suggest
+    - toc.integrate
+  font:
+    code: Fira Code
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - 'Home': 'index.md'
+  - 'Quick Start': 'quickstart.md'
+  - 'Core Concepts': 'concepts.md'
+  - 'Cookbook': 'cookbook.md'
+  - 'API Reference': 'api.md'
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+
+plugins:
+  - search
+
+copyright: |
+  <div style="color: var(--md-footer-fg-color--lighter)">
+  Copyright © 2025 Nicolas Schlecker<br />
+  Licensed under Apache License 2.0<br />
+  <br />
+  Documentation made with <a href="https://www.mkdocs.org" target="_blank" rel="noopener">MkDocs</a> 
+  and <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">Material for MkDocs</a>
+  </div>
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/DevNico/slick-seeker
+  scala:
+    versions: "2.13.14+, 3.3.4+, 3.5.2+"
+  slick:
+    minVersion: "3.5.0"
+    version: "3.5.1"

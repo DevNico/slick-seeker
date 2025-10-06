@@ -1,0 +1,27 @@
+# sbt
+target/
+project/target/
+project/project/
+.bsp/
+.bloop/
+.metals/
+metals.sbt
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Scala
+*.class
+*.log
+
+# Documentation site
+site/
+docs/venv/
