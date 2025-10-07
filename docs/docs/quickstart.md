@@ -8,8 +8,8 @@ Add to your `build.sbt`:
 
 ```scala
 libraryDependencies ++= Seq(
-  "io.github.devnico" %% "slick-seeker" % "0.1.0",
-  "io.github.devnico" %% "slick-seeker-play-json" % "0.1.0"  // Optional
+  "io.github.devnico" %% "slick-seeker" % "0.3.3",
+  "io.github.devnico" %% "slick-seeker-play-json" % "0.3.3"  // Optional
 )
 ```
 
