@@ -10,8 +10,8 @@ final case class QueryWithCursor[E, U, C, CU, CVE](
     toCursor: E => C,
     encode: CU => List[CVE]
 )(implicit
-    queryShape: Shape[FlatShapeLevel, E, U, E],
-    cShape: Shape[FlatShapeLevel, C, CU, C]
+    val queryShape: Shape[FlatShapeLevel, E, U, E],
+    val cShape: Shape[FlatShapeLevel, C, CU, C]
 ) {
 
   def withSeekColumn[T, K](col: E => ColumnOrdered[T])(implicit

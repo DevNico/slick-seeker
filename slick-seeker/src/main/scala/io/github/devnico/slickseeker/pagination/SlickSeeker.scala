@@ -9,6 +9,15 @@ import slick.lifted
 
 import scala.concurrent.ExecutionContext
 
+/** SlickSeeker provides cursor-based pagination for Slick queries.
+  *
+  * @param baseQuery
+  *   The base query to paginate
+  * @param columns
+  *   The columns used for seeking/sorting
+  * @param qwc
+  *   Query with cursor helper for projection
+  */
 final case class SlickSeeker[E, U, CVE, C, CU](
     baseQuery: lifted.Query[E, U, Seq],
     columns: Vector[SeekColumn[E, U, CVE]],

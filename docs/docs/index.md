@@ -7,6 +7,7 @@ Type-safe, high-performance cursor-based pagination for Slick 3.5+.
 - **Keyset Pagination** - O(1) performance regardless of page depth
 - **Bidirectional** - Navigate forward and backward through result sets
 - **Type-Safe** - Compile-time verification of cursor/column matching
+- **PostgreSQL Tuple Optimization** - Compile-time safe tuple comparisons for PostgreSQL (NEW!)
 - **Profile Agnostic** - Works with any Slick JDBC profile (PostgreSQL, MySQL, H2, SQLite, Oracle, etc.)
 - **Flexible Ordering** - Support for nulls first/last, custom enum orders
 - **Modular** - Core + optional Play JSON integration
@@ -49,8 +50,8 @@ Add to your `build.sbt`:
 
 ```scala
 libraryDependencies ++= Seq(
-  "io.github.devnico" %% "slick-seeker" % "0.3.3",
-  "io.github.devnico" %% "slick-seeker-play-json" % "0.3.3"  // Optional, but you need some kind of cursor encoder
+  "io.github.devnico" %% "slick-seeker" % "0.4.0",
+  "io.github.devnico" %% "slick-seeker-play-json" % "0.4.0"  // Optional, but you need some kind of cursor encoder
 )
 ```
 

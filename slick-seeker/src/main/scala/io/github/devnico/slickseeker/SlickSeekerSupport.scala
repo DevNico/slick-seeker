@@ -213,6 +213,42 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
           shape: lifted.Shape[lifted.FlatShapeLevel, E, U, E],
           baseTypedType: BaseTypedType[Int]
       ): SlickSeeker[E, U, CVE, lifted.Rep[Int], Int] = SlickSeeker(query)
+
+      /** Create a PostgreSQL tuple-optimized seeker with ASC ordering.
+        *
+        * Enforces type-level constraints:
+        *   - All columns must be non-nullable (Option[T] will fail at compile time)
+        *   - All columns must be ASC (enforced by type parameter)
+        */
+      def toPgTupleSeekerAsc[CVE](implicit
+          cursorEnvironment: CursorEnvironment[CVE],
+          shape: lifted.Shape[lifted.FlatShapeLevel, E, U, E],
+          baseTypedType: BaseTypedType[Int]
+      ): pagination.SlickPgTupleSeeker[E, U, CVE, lifted.Rep[Int], Int, slick.ast.Ordering.Asc.type] =
+        pagination.SlickPgTupleSeeker(
+          query,
+          Vector.empty,
+          support.QueryWithCursor.seed[E, U, CVE],
+          slick.ast.Ordering.Asc
+        )
+
+      /** Create a PostgreSQL tuple-optimized seeker with DESC ordering.
+        *
+        * Enforces type-level constraints:
+        *   - All columns must be non-nullable (Option[T] will fail at compile time)
+        *   - All columns must be DESC (enforced by type parameter)
+        */
+      def toPgTupleSeekerDesc[CVE](implicit
+          cursorEnvironment: CursorEnvironment[CVE],
+          shape: lifted.Shape[lifted.FlatShapeLevel, E, U, E],
+          baseTypedType: BaseTypedType[Int]
+      ): pagination.SlickPgTupleSeeker[E, U, CVE, lifted.Rep[Int], Int, slick.ast.Ordering.Desc.type] =
+        pagination.SlickPgTupleSeeker(
+          query,
+          Vector.empty,
+          support.QueryWithCursor.seed[E, U, CVE],
+          slick.ast.Ordering.Desc
+        )
     }
   }
 

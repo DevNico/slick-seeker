@@ -317,4 +317,5 @@ class SlickSeekerIntegrationSpec extends AnyWordSpec with Matchers with BeforeAn
       result.items.head.firstName shouldBe "Jack"
     }
   }
+
 }

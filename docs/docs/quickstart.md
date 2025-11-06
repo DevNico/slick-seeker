@@ -8,8 +8,8 @@ Add to your `build.sbt`:
 
 ```scala
 libraryDependencies ++= Seq(
-  "io.github.devnico" %% "slick-seeker" % "0.3.3",
-  "io.github.devnico" %% "slick-seeker-play-json" % "0.3.3"  // Optional
+  "io.github.devnico" %% "slick-seeker" % "0.4.0",
+  "io.github.devnico" %% "slick-seeker-play-json" % "0.4.0"  // Optional
 )
 ```
 
@@ -169,7 +169,75 @@ val seeker2 = users.toSeeker
   .seekDirection(SortDirection.Desc)
 ```
 
+## PostgreSQL? Use Type-Safe Tuple Seeker!
+
+If you're using **PostgreSQL** and all your seek columns are **non-nullable** with **uniform direction**, use `SlickPgTupleSeeker` for compile-time safety and better performance:
+
+```scala
+// Standard SlickSeeker (works on any database)
+val standardSeeker = users.toSeeker
+  .seek(_.name.asc)
+  .seek(_.id.asc)
+
+// PostgreSQL-optimized with compile-time safety
+val pgSeeker = users.toPgTupleSeekerAsc
+  .seek(_.name)   // No .asc needed - enforced by type
+  .seek(_.id)
+
+// Generates optimized SQL:
+// WHERE (name, id) > (?, ?)
+// vs standard: WHERE (name > ?) OR (name = ? AND id > ?)
+```
+
+**Benefits:**
+- ✅ **Compile-time safety** - rejects `Option[T]` columns at compilation
+- ✅ **Simpler SQL** - single tuple comparison instead of OR clauses
+- ✅ **Better performance** - easier for PostgreSQL to optimize
+- ✅ **Type-enforced direction** - impossible to mix ASC/DESC
+
+**Use when:**
+- Database is PostgreSQL 8.2+ or H2 in PostgreSQL mode
+- All columns are non-nullable (no `Option[T]`)
+- All columns have same direction (all ASC or all DESC)
+
+**See [Cookbook - PostgreSQL Tuple Optimization](cookbook.md#postgresql-tuple-optimization) for details.**
+
+## Quick Reference
+
+### Choose Your Seeker
+
+| Feature | Standard `SlickSeeker` | `SlickPgTupleSeeker` |
+|---------|----------------------|---------------------|
+| **Databases** | All (PostgreSQL, MySQL, H2, SQLite, etc.) | PostgreSQL 8.2+, H2 (PG mode) |
+| **Nullable columns** | ✅ Yes | ❌ No - compile error |
+| **Mixed directions** | ✅ Yes | ❌ No - type enforced |
+| **Type safety** | Runtime | **Compile-time** |
+| **SQL generation** | OR-based clauses | **Tuple comparison** |
+| **Performance** | Good | **Better (PostgreSQL)** |
+
+### API Quick Reference
+
+```scala
+// Standard seeker
+users.toSeeker
+  .seek(_.col.asc)           // Ascending
+  .seek(_.col.desc)          // Descending
+  .seek(_.col.nullsLast.asc) // Nulls handling
+  .seekDirection(...)        // Batch direction change
+
+// PostgreSQL tuple seeker (type-safe)
+users.toPgTupleSeekerAsc     // All columns ASC
+  .seek(_.col)               // No .asc/.desc needed
+
+users.toPgTupleSeekerDesc    // All columns DESC
+  .seek(_.col)
+
+// Pagination (same for both)
+seeker.page(limit = 20, cursor = None)           // First page
+seeker.page(limit = 20, cursor = Some("..."))    // Next/prev page
+```
+
 ## What's Next?
 
 - [Core Concepts](concepts.md) - Deep dive into cursor pagination and decorators
-- [Cookbook](cookbook.md) - Real-world examples
+- [Cookbook](cookbook.md) - Real-world examples and PostgreSQL optimization
