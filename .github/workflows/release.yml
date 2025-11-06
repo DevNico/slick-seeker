@@ -26,6 +26,9 @@ jobs:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
+      - name: Run tests
+        run: sbt +test
+
       - name: Publish
         run: sbt +publishSigned
         env:
