@@ -22,7 +22,7 @@ final case class SlickSeeker[E, U, CVE, C, CU](
     baseQuery: lifted.Query[E, U, Seq],
     columns: Vector[SeekColumn[E, U, CVE]],
     qwc: QueryWithCursor[E, U, C, CU, CVE]
-)(implicit shape: lifted.Shape[lifted.FlatShapeLevel, E, U, E]) {
+)(implicit shape: lifted.Shape[lifted.FlatShapeLevel, E, U, E]) extends Seeker[U, CVE] {
   import ColumnSeekFilterTypes._
   import SlickSeeker._
 

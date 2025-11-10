@@ -29,7 +29,7 @@ final case class SlickPgTupleSeeker[E, U, CVE, C, CU, D <: Ordering.Direction](
     columns: Vector[PgTupleSeekColumn[E, U, CVE]],
     qwc: QueryWithCursor[E, U, C, CU, CVE],
     direction: D
-)(implicit shape: lifted.Shape[lifted.FlatShapeLevel, E, U, E]) {
+)(implicit shape: lifted.Shape[lifted.FlatShapeLevel, E, U, E]) extends Seeker[U, CVE] {
 
   import SlickSeeker._
 
