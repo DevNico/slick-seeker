@@ -17,7 +17,7 @@ Type-safe, high-performance cursor-based pagination for Slick 3.5+.
 ## Requirements
 
 - **Scala**: 2.13.14+, 3.3.4+, 3.5.2+
-- **Slick**: 3.5.0+
+- **Slick**: 3.6.1+
 - **Java**: 11, 17, 21, or 25
 - Any JDBC database supported by Slick
 

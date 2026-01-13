@@ -30,12 +30,12 @@ ThisBuild / makePomConfiguration := makePomConfiguration.value.withConfiguration
 )
 
 // Version and Scala settings
-val slickSeekerVersion = "0.5.0"
+val slickSeekerVersion = "3.6.1"
 
 val scala3Version   = "3.3.5"
 val scala213Version = "2.13.16"
 
-val slickVersion     = "3.5.0"
+val slickVersion     = "3.6.1"
 val scalatestVersion = "3.2.19"
 
 lazy val commonSettings = Seq(

@@ -86,5 +86,5 @@ extra:
   scala:
     versions: "2.13.14+, 3.3.4+, 3.5.2+"
   slick:
-    minVersion: "3.5.0"
+    minVersion: "3.6.1"
     version: "3.5.1"

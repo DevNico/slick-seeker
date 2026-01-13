@@ -111,7 +111,7 @@ val page2 = db.run(seeker.page(limit = 20, cursor = page1.nextCursor))
 ## Requirements
 
 - Scala 2.13.14+, 3.3.4+, 3.5.2+
-- Slick 3.5.0+
+- Slick 3.6.1+
 - Your Slick profile API must be imported before slick-seeker
 
 ## License
