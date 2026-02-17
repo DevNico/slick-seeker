@@ -82,11 +82,15 @@ val seeker = users.toSeeker
   .seek(_.name.asc)
   .seek(_.id.asc)
 
-// Paginate forward
+// Paginate forward (includes total count)
 val page1 = db.run(seeker.page(limit = 20, cursor = None))
 // PaginatedResult(total=100, items=[...], nextCursor=Some("..."), prevCursor=None)
 
 val page2 = db.run(seeker.page(limit = 20, cursor = page1.nextCursor))
+
+// Paginate without total count (skips the COUNT(*) query)
+val fast1 = db.run(seeker.pageWithoutCount(limit = 20, cursor = None))
+// PaginatedResultWithoutCount(items=[...], nextCursor=Some("..."), prevCursor=None)
 
 // Paginate backward
 val page0 = db.run(seeker.page(limit = 20, cursor = page1.prevCursor))

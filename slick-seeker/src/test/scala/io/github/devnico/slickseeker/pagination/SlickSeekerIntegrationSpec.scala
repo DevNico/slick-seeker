@@ -290,6 +290,87 @@ class SlickSeekerIntegrationSpec extends AnyWordSpec with Matchers with BeforeAn
     }
   }
 
+  "SlickSeeker pageWithoutCount" should {
+
+    "paginate forward without total count" in {
+      val seeker = persons.toSeeker
+        .seek(_.firstName.asc)
+        .seek(_.id.asc)
+
+      val page1 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = None)))
+
+      page1.items should have size 3
+      page1.items.map(_.firstName) shouldBe Seq("Alice", "Bob", "Charlie")
+      page1.nextCursor shouldBe defined
+      page1.prevCursor shouldBe None
+    }
+
+    "paginate backward without total count" in {
+      val seeker = persons.toSeeker
+        .seek(_.firstName.asc)
+        .seek(_.id.asc)
+
+      // Navigate forward
+      val page1 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = None)))
+      val page2 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = page1.nextCursor)))
+      val page3 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = page2.nextCursor)))
+
+      page3.prevCursor shouldBe defined
+
+      // Navigate backward
+      val backToPage2 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = page3.prevCursor)))
+      backToPage2.items.map(_.firstName) shouldBe Seq("Diana", "Eve", "Frank")
+      backToPage2.items shouldBe page2.items
+
+      val backToPage1 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = backToPage2.prevCursor)))
+      backToPage1.items.map(_.firstName) shouldBe Seq("Alice", "Bob", "Charlie")
+      backToPage1.items shouldBe page1.items
+    }
+
+    "handle empty results" in {
+      val seeker = persons.filter(_.age > 1000).toSeeker
+        .seek(_.firstName.asc)
+        .seek(_.id.asc)
+
+      val result = await(db.run(seeker.pageWithoutCount(limit = 10, cursor = None)))
+
+      result.items shouldBe empty
+      result.nextCursor shouldBe None
+      result.prevCursor shouldBe None
+    }
+
+    "produce cursors interoperable with page()" in {
+      val seeker = persons.toSeeker
+        .seek(_.firstName.asc)
+        .seek(_.id.asc)
+
+      // Get cursor from pageWithoutCount, use it with page
+      val withoutCount1 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = None)))
+      val withCount2    = await(db.run(seeker.page(limit = 3, cursor = withoutCount1.nextCursor)))
+
+      withCount2.items.map(_.firstName) shouldBe Seq("Diana", "Eve", "Frank")
+      withCount2.total shouldBe 10
+
+      // Get cursor from page, use it with pageWithoutCount
+      val withoutCount3 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = withCount2.nextCursor)))
+      withoutCount3.items.map(_.firstName) shouldBe Seq("Grace", "Henry", "Iris")
+    }
+
+    "return same items as page()" in {
+      val seeker = persons.toSeeker
+        .seek(_.age.desc)
+        .seek(_.firstName.asc)
+        .seek(_.id.asc)
+
+      val withCount    = await(db.run(seeker.page(limit = 5, cursor = None)))
+      val withoutCount = await(db.run(seeker.pageWithoutCount(limit = 5, cursor = None)))
+
+      withoutCount.items shouldBe withCount.items
+      withoutCount.nextCursor shouldBe withCount.nextCursor
+      withoutCount.prevCursor shouldBe withCount.prevCursor
+    }
+  }
+
   "SlickSeeker with seekDirection" should {
 
     "reverse all column directions" in {

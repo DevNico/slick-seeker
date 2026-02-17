@@ -17,6 +17,9 @@ package object slickseeker {
   type PaginatedResult[T] = pagination.PaginatedResult[T]
   val PaginatedResult: pagination.PaginatedResult.type = pagination.PaginatedResult
 
+  type PaginatedResultWithoutCount[T] = pagination.PaginatedResultWithoutCount[T]
+  val PaginatedResultWithoutCount: pagination.PaginatedResultWithoutCount.type = pagination.PaginatedResultWithoutCount
+
   // Type aliases for cursor system
   type CursorEnvironment[E] = cursor.CursorEnvironment[E]
   val CursorEnvironment: cursor.CursorEnvironment.type = cursor.CursorEnvironment

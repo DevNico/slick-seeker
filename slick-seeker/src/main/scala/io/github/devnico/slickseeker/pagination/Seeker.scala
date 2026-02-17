@@ -42,4 +42,33 @@ trait Seeker[U, CVE] {
       cursorEnvironment: CursorEnvironment[CVE],
       ec: ExecutionContext
   ): profile.api.DBIOAction[PaginatedResult[U], profile.api.NoStream, profile.api.Effect.Read]
+
+  /** Execute a paginated query without computing the total count.
+    *
+    * This avoids the extra COUNT(*) query.
+    *
+    * @param limit
+    *   Maximum number of items to return
+    * @param cursor
+    *   Optional cursor for pagination navigation
+    * @param maxLimit
+    *   Maximum allowed limit
+    * @param profile
+    *   JDBC profile for database operations
+    * @param cursorEnvironment
+    *   Environment for encoding/decoding cursors
+    * @param ec
+    *   Execution context for async operations
+    * @return
+    *   Database action that returns a paginated result without total count
+    */
+  def pageWithoutCount[Profile <: JdbcProfile](
+      limit: Int,
+      cursor: Option[String],
+      maxLimit: Int
+  )(implicit
+      profile: Profile,
+      cursorEnvironment: CursorEnvironment[CVE],
+      ec: ExecutionContext
+  ): profile.api.DBIOAction[PaginatedResultWithoutCount[U], profile.api.NoStream, profile.api.Effect.Read]
 }

@@ -7,7 +7,8 @@ Type-safe, high-performance cursor-based pagination for Slick 3.5+.
 - **Keyset Pagination** - O(1) performance regardless of page depth
 - **Bidirectional** - Navigate forward and backward through result sets
 - **Type-Safe** - Compile-time verification of cursor/column matching
-- **PostgreSQL Tuple Optimization** - Compile-time safe tuple comparisons for PostgreSQL (NEW!)
+- **Count-Free Pagination** - Skip `COUNT(*)` queries with `pageWithoutCount`
+- **PostgreSQL Tuple Optimization** - Compile-time safe tuple comparisons for PostgreSQL
 - **Profile Agnostic** - Works with any Slick JDBC profile (PostgreSQL, MySQL, H2, SQLite, Oracle, etc.)
 - **Flexible Ordering** - Support for nulls first/last, custom enum orders
 - **Modular** - Core + optional Play JSON integration
@@ -93,9 +94,13 @@ val seeker = users.toSeeker
   .seek(_.name.asc)      // Primary sort
   .seek(_.id.asc)        // Tiebreaker
 
-// Paginate!
+// Paginate (with total count)
 val page1 = db.run(seeker.page(limit = 20, cursor = None))
 // PaginatedResult(total=100, items=[...], nextCursor=Some("..."), prevCursor=None)
+
+// Paginate (without total count — skips the COUNT(*) query)
+val fast1 = db.run(seeker.pageWithoutCount(limit = 20, cursor = None))
+// PaginatedResultWithoutCount(items=[...], nextCursor=Some("..."), prevCursor=None)
 
 val page2 = db.run(seeker.page(limit = 20, cursor = page1.nextCursor))
 // Continue pagination...

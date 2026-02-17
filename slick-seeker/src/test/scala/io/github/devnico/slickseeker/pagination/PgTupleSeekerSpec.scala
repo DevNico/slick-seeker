@@ -159,6 +159,54 @@ class PgTupleSeekerSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll
     }
   }
 
+  "SlickPgTupleSeeker pageWithoutCount" should {
+
+    "paginate forward without total count" in {
+      val seeker = persons.toPgTupleSeekerAsc
+        .seek(_.firstName)
+        .seek(_.id)
+
+      val page1 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = None)))
+
+      page1.items should have size 3
+      page1.items.map(_.firstName) shouldBe Seq("Alice", "Bob", "Charlie")
+      page1.nextCursor shouldBe defined
+      page1.prevCursor shouldBe None
+
+      val page2 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = page1.nextCursor)))
+      page2.items.map(_.firstName) shouldBe Seq("Diana", "Eve", "Frank")
+    }
+
+    "paginate backward without total count" in {
+      val seeker = persons.toPgTupleSeekerAsc
+        .seek(_.firstName)
+        .seek(_.id)
+
+      val page1 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = None)))
+      val page2 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = page1.nextCursor)))
+      val page3 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = page2.nextCursor)))
+
+      val back2 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = page3.prevCursor)))
+      back2.items.map(_.firstName) shouldBe Seq("Diana", "Eve", "Frank")
+
+      val back1 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = back2.prevCursor)))
+      back1.items.map(_.firstName) shouldBe Seq("Alice", "Bob", "Charlie")
+    }
+
+    "return same items as page()" in {
+      val seeker = persons.toPgTupleSeekerAsc
+        .seek(_.firstName)
+        .seek(_.id)
+
+      val withCount    = await(db.run(seeker.page(limit = 5, cursor = None)))
+      val withoutCount = await(db.run(seeker.pageWithoutCount(limit = 5, cursor = None)))
+
+      withoutCount.items shouldBe withCount.items
+      withoutCount.nextCursor shouldBe withCount.nextCursor
+      withoutCount.prevCursor shouldBe withCount.prevCursor
+    }
+  }
+
   // These tests document compile-time failures (uncomment to see errors)
   /*
   "SlickPgTupleSeeker compile-time safety" should {

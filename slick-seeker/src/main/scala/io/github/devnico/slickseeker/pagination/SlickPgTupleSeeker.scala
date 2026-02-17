@@ -71,19 +71,37 @@ final case class SlickPgTupleSeeker[E, U, CVE, C, CU, D <: Ordering.Direction](
     val theApi = profile.api
     import theApi._
 
-    val decodedCursor = cursorEnvironment.decodeWithDirectionOrThrow(cursor)
-    val isBackward    = decodedCursor.exists(_._1 == CursorDirection.Backward)
-    val rawCursor     = decodedCursor.map(_._2)
-
-    val queryColumns    = columns // Direction is fixed at seeker level
-    val normalizedLimit = limit.max(1).min(maxLimit)
-
     val totalAction: DBIOAction[Int, NoStream, Effect.Read] = {
       val countQuery   = baseQuery.map(_ => 1).length
       val wrappedQuery = Query(countQuery)
       val ext          = streamableQueryActionExtensionMethods(wrappedQuery)
       ext.result.map(_.head)
     }
+
+    for {
+      total  <- totalAction
+      result <- pageWithoutCount[Profile](limit, cursor, maxLimit)(profile, cursorEnvironment, ec)
+    } yield result.withCount(total)
+  }
+
+  def pageWithoutCount[Profile <: JdbcProfile](
+      limit: Int,
+      cursor: Option[String],
+      maxLimit: Int = 100
+  )(implicit
+      profile: Profile,
+      cursorEnvironment: CursorEnvironment[CVE],
+      ec: ExecutionContext
+  ): profile.api.DBIOAction[PaginatedResultWithoutCount[U], profile.api.NoStream, profile.api.Effect.Read] = {
+    val theApi = profile.api
+    import theApi._
+
+    val decodedCursor = cursorEnvironment.decodeWithDirectionOrThrow(cursor)
+    val isBackward    = decodedCursor.exists(_._1 == CursorDirection.Backward)
+    val rawCursor     = decodedCursor.map(_._2)
+
+    val queryColumns    = columns // Direction is fixed at seeker level
+    val normalizedLimit = limit.max(1).min(maxLimit)
 
     val resultsAction: DBIOAction[Seq[(U, CU)], NoStream, Effect.Read] = {
       val filtered  = baseQuery.filter(buildPgTupleFilter(_, queryColumns, rawCursor, isBackward))
@@ -94,53 +112,49 @@ final case class SlickPgTupleSeeker[E, U, CVE, C, CU, D <: Ordering.Direction](
       ext.result
     }
 
-    totalAction.flatMap { total =>
-      resultsAction.map { results =>
-        val hasMore = results.size > normalizedLimit
-        val items   = if (hasMore) results.init else results
+    resultsAction.map { results =>
+      val hasMore = results.size > normalizedLimit
+      val items   = if (hasMore) results.init else results
 
-        val itemsWithoutCursor = items.map(_._1)
-        val itemsWithCursor    = items.map(_._2)
+      val itemsWithoutCursor = items.map(_._1)
+      val itemsWithCursor    = items.map(_._2)
 
-        if (isBackward) {
-          // In backward mode: results are DESC ordered, need to reverse
-          val reversedItems   = itemsWithoutCursor.reverse
-          val reversedCursors = itemsWithCursor.reverse
+      if (isBackward) {
+        // In backward mode: results are DESC ordered, need to reverse
+        val reversedItems   = itemsWithoutCursor.reverse
+        val reversedCursors = itemsWithCursor.reverse
 
-          val nextCursor = // Actually prev because reversed
-            if (rawCursor.isDefined && reversedCursors.nonEmpty)
-              Some(cursorEnvironment.encode(encodeCursor(reversedCursors.head), CursorDirection.Backward))
-            else None
+        val nextCursor = // Actually prev because reversed
+          if (rawCursor.isDefined && reversedCursors.nonEmpty)
+            Some(cursorEnvironment.encode(encodeCursor(reversedCursors.head), CursorDirection.Backward))
+          else None
 
-          val prevCursor = // Actually next because reversed
-            if (hasMore && reversedCursors.nonEmpty)
-              Some(cursorEnvironment.encode(encodeCursor(reversedCursors.last), CursorDirection.Forward))
-            else None
+        val prevCursor = // Actually next because reversed
+          if (hasMore && reversedCursors.nonEmpty)
+            Some(cursorEnvironment.encode(encodeCursor(reversedCursors.last), CursorDirection.Forward))
+          else None
 
-          PaginatedResult(
-            total = total,
-            items = reversedItems,
-            nextCursor = prevCursor,
-            prevCursor = nextCursor
-          )
-        } else {
-          val nextCursor =
-            if (hasMore && itemsWithCursor.nonEmpty)
-              Some(cursorEnvironment.encode(encodeCursor(itemsWithCursor.last), CursorDirection.Forward))
-            else None
+        PaginatedResultWithoutCount(
+          items = reversedItems,
+          nextCursor = prevCursor,
+          prevCursor = nextCursor
+        )
+      } else {
+        val nextCursor =
+          if (hasMore && itemsWithCursor.nonEmpty)
+            Some(cursorEnvironment.encode(encodeCursor(itemsWithCursor.last), CursorDirection.Forward))
+          else None
 
-          val prevCursor =
-            if (rawCursor.isDefined && itemsWithCursor.nonEmpty)
-              Some(cursorEnvironment.encode(encodeCursor(itemsWithCursor.head), CursorDirection.Backward))
-            else None
+        val prevCursor =
+          if (rawCursor.isDefined && itemsWithCursor.nonEmpty)
+            Some(cursorEnvironment.encode(encodeCursor(itemsWithCursor.head), CursorDirection.Backward))
+          else None
 
-          PaginatedResult(
-            total = total,
-            items = itemsWithoutCursor,
-            nextCursor = nextCursor,
-            prevCursor = prevCursor
-          )
-        }
+        PaginatedResultWithoutCount(
+          items = itemsWithoutCursor,
+          nextCursor = nextCursor,
+          prevCursor = prevCursor
+        )
       }
     }
   }

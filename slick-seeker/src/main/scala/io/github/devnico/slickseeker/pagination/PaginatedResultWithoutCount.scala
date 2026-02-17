@@ -1,9 +1,9 @@
 package io.github.devnico.slickseeker.pagination
 
-/** Result of a paginated query.
+/** Result of a paginated query without total count.
   *
-  * @param total
-  *   Total number of items in the unpaginated query
+  * Use this when you don't need the total count, avoiding the extra COUNT(*) query.
+  *
   * @param items
   *   Items in this page
   * @param prevCursor
@@ -13,19 +13,18 @@ package io.github.devnico.slickseeker.pagination
   * @tparam T
   *   Type of items
   */
-final case class PaginatedResult[T](
-    total: Int,
+final case class PaginatedResultWithoutCount[T](
     items: Seq[T],
     prevCursor: Option[String],
     nextCursor: Option[String]
 ) {
 
   /** Map items to a different type while preserving pagination metadata */
-  def mapItems[U](f: T => U): PaginatedResult[U] =
+  def mapItems[U](f: T => U): PaginatedResultWithoutCount[U] =
     copy(items = items.map(f))
 
-  /** Convert to a result without total count */
-  def withoutCount: PaginatedResultWithoutCount[T] =
-    PaginatedResultWithoutCount(items, prevCursor, nextCursor)
+  /** Add a total count to produce a full PaginatedResult */
+  def withCount(total: Int): PaginatedResult[T] =
+    PaginatedResult(total, items, prevCursor, nextCursor)
 
 }

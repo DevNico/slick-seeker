@@ -256,6 +256,39 @@ class PlayJsonPaginationIntegrationSpec extends AnyWordSpec with Matchers with B
       result.nextCursor shouldBe defined
     }
 
+    "paginate forward with pageWithoutCount" in {
+      val seeker = persons.toSeeker
+        .seek(_.firstName.asc)
+        .seek(_.id.asc)
+
+      val page1 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = None)))
+      page1.items should have size 3
+      page1.items.map(_.firstName) shouldBe Seq("Alice", "Bob", "Charlie")
+      page1.nextCursor shouldBe defined
+      page1.prevCursor shouldBe None
+
+      val page2 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = page1.nextCursor)))
+      page2.items.map(_.firstName) shouldBe Seq("Diana", "Eve", "Frank")
+      page2.prevCursor shouldBe defined
+    }
+
+    "produce cursors interoperable between page and pageWithoutCount" in {
+      val seeker = persons.toSeeker
+        .seek(_.firstName.asc)
+        .seek(_.id.asc)
+
+      // Cursor from pageWithoutCount works with page
+      val withoutCount1 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = None)))
+      val withCount2    = await(db.run(seeker.page(limit = 3, cursor = withoutCount1.nextCursor)))
+
+      withCount2.items.map(_.firstName) shouldBe Seq("Diana", "Eve", "Frank")
+      withCount2.total shouldBe 10
+
+      // Cursor from page works with pageWithoutCount
+      val withoutCount3 = await(db.run(seeker.pageWithoutCount(limit = 3, cursor = withCount2.nextCursor)))
+      withoutCount3.items.map(_.firstName) shouldBe Seq("Grace", "Henry", "Iris")
+    }
+
     "encode and decode cursors correctly through multiple pages" in {
       val seeker = persons.toSeeker
         .seek(_.firstName.asc)

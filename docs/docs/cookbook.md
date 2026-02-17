@@ -30,6 +30,11 @@ class UserController @Inject()(
       case _ => users.toSeeker.seek(_.id.asc)
     }
 
+    // Use pageWithoutCount to skip the COUNT(*) query for better performance
+    db.run(seeker.pageWithoutCount(limit.getOrElse(20), cursor, maxLimit = 100))
+      .map(result => Ok(Json.toJson(result)))
+
+    // Or use page to include the total count
     db.run(seeker.page(limit.getOrElse(20), cursor, maxLimit = 100))
       .map(result => Ok(Json.toJson(result)))
   }
@@ -44,17 +49,18 @@ def searchUsers(
   activeOnly: Boolean,
   cursor: Option[String],
   limit: Int
-): Future[PaginatedResult[User]] = {
-  
+): Future[PaginatedResultWithoutCount[User]] = {
+
   val baseQuery = users
     .filterOpt(nameFilter)(_.name like _)
     .filterIf(activeOnly)(_.active === true)
-  
+
   val seeker = baseQuery.toSeeker
     .seek(_.name.asc)
     .seek(_.id.asc)
-  
-  db.run(seeker.page(limit, cursor))
+
+  // Use pageWithoutCount for filtered queries where the total is less useful
+  db.run(seeker.pageWithoutCount(limit, cursor))
 }
 ```
 
@@ -371,6 +377,10 @@ val db = Database.forConfig("mydb")
 
 val page1 = db.run(seeker.page(limit = 50, cursor = None))
 // PaginatedResult(total=1000, items=[...], nextCursor=Some("..."))
+
+// Or without count for better performance
+val fast1 = db.run(seeker.pageWithoutCount(limit = 50, cursor = None))
+// PaginatedResultWithoutCount(items=[...], nextCursor=Some("..."))
 
 val page2 = page1.flatMap { p1 =>
   db.run(seeker.page(limit = 50, cursor = p1.nextCursor))

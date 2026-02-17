@@ -55,14 +55,6 @@ final case class SlickSeeker[E, U, CVE, C, CU](
     val theApi = profile.api
     import theApi._
 
-    val decodedCursor = cursorEnvironment.decodeWithDirectionOrThrow(cursor)
-    val isBackward    = decodedCursor.exists(_._1 == CursorDirection.Backward)
-    val rawCursor     = decodedCursor.map(_._2)
-
-    val queryColumns = if (isBackward) columns.map(_.reversed) else columns
-
-    val normalizedLimit = limit.max(1).min(maxLimit)
-
     // Scala 2 workaround: map the length to a single-value query
     val totalAction: DBIOAction[Int, NoStream, Effect.Read] = {
       val countQuery = baseQuery.map(_ => 1).length // This returns Rep[Int]
@@ -71,6 +63,36 @@ final case class SlickSeeker[E, U, CVE, C, CU](
       val ext          = streamableQueryActionExtensionMethods(wrappedQuery)
       ext.result.map(_.head)
     }
+
+    val resultsAction: DBIOAction[PaginatedResultWithoutCount[U], NoStream, Effect.Read] =
+      pageWithoutCount[Profile](limit, cursor, maxLimit)(profile, cursorEnvironment, ec)
+
+    for {
+      total  <- totalAction
+      result <- resultsAction
+    } yield result.withCount(total)
+  }
+
+  def pageWithoutCount[Profile <: JdbcProfile](
+      limit: Int,
+      cursor: Option[String],
+      maxLimit: Int = 100
+  )(implicit
+      profile: Profile,
+      cursorEnvironment: CursorEnvironment[CVE],
+      ec: ExecutionContext
+  ): profile.api.DBIOAction[PaginatedResultWithoutCount[U], profile.api.NoStream, profile.api.Effect.Read] = {
+    // Explicitly import the api to make implicits available
+    val theApi = profile.api
+    import theApi._
+
+    val decodedCursor = cursorEnvironment.decodeWithDirectionOrThrow(cursor)
+    val isBackward    = decodedCursor.exists(_._1 == CursorDirection.Backward)
+    val rawCursor     = decodedCursor.map(_._2)
+
+    val queryColumns = if (isBackward) columns.map(_.reversed) else columns
+
+    val normalizedLimit = limit.max(1).min(maxLimit)
 
     val resultsAction: DBIOAction[Seq[(U, CU)], NoStream, Effect.Read] = {
       val filtered  = baseQuery.filter(buildFilter(_, queryColumns, rawCursor))
@@ -81,10 +103,7 @@ final case class SlickSeeker[E, U, CVE, C, CU](
       ext.result
     }
 
-    for {
-      total   <- totalAction
-      results <- resultsAction
-    } yield {
+    resultsAction.map { results =>
       val hasMoreResults = results.size > normalizedLimit
       val pageItems      = if (hasMoreResults) results.dropRight(1) else results
 
@@ -116,8 +135,7 @@ final case class SlickSeeker[E, U, CVE, C, CU](
         Some(cursorEnvironment.encode(cursorValues, CursorDirection.Backward))
       } else None
 
-      PaginatedResult(
-        total = total,
+      PaginatedResultWithoutCount(
         items = items.map(_._1),
         nextCursor = nextCursor,
         prevCursor = prevCursor

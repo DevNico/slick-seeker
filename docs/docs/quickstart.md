@@ -112,6 +112,32 @@ case class PaginatedResult[T](
 )
 ```
 
+## PaginatedResultWithoutCount
+
+The `pageWithoutCount()` method returns a `PaginatedResultWithoutCount[T]`, skipping the `COUNT(*)` query. This is useful when the total count is not needed (e.g., infinite scroll UIs).
+
+```scala
+case class PaginatedResultWithoutCount[T](
+  items: Seq[T],           // Current page items
+  nextCursor: Option[String],  // Cursor for next page (None if last page)
+  prevCursor: Option[String]   // Cursor for previous page (None if first page)
+)
+```
+
+Usage:
+
+```scala
+// Without count (faster — no COUNT(*) query)
+val page1: Future[PaginatedResultWithoutCount[User]] =
+  db.run(seeker.pageWithoutCount(limit = 20, cursor = None))
+
+// Convert between result types
+val withCount: PaginatedResult[User] = page1WithoutCount.withCount(100)
+val withoutCount: PaginatedResultWithoutCount[User] = fullResult.withoutCount
+```
+
+Cursors are fully interoperable — a cursor from `page()` works with `pageWithoutCount()` and vice versa.
+
 ## Using with Play JSON
 
 For REST APIs, you can serialize `PaginatedResult` to JSON:
@@ -232,9 +258,10 @@ users.toPgTupleSeekerAsc     // All columns ASC
 users.toPgTupleSeekerDesc    // All columns DESC
   .seek(_.col)
 
-// Pagination (same for both)
-seeker.page(limit = 20, cursor = None)           // First page
-seeker.page(limit = 20, cursor = Some("..."))    // Next/prev page
+// Pagination (same for both seeker types)
+seeker.page(limit = 20, cursor = None)                    // With total count
+seeker.page(limit = 20, cursor = Some("..."))              // Next/prev page
+seeker.pageWithoutCount(limit = 20, cursor = None)         // Without total count
 ```
 
 ## What's Next?

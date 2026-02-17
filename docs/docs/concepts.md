@@ -156,9 +156,30 @@ ORDER BY
   END ASC
 ```
 
+## Pagination Without Count
+
+By default, `page()` runs a `COUNT(*)` query to include the total number of matching rows. Use `pageWithoutCount()` to skip it:
+
+```scala
+// With count (runs COUNT(*) + data query)
+val result: PaginatedResult[User] =
+  db.run(seeker.page(limit = 20, cursor = None))
+
+// Without count (runs data query only — faster)
+val result: PaginatedResultWithoutCount[User] =
+  db.run(seeker.pageWithoutCount(limit = 20, cursor = None))
+```
+
+Both methods produce interoperable cursors. You can convert between result types:
+
+```scala
+val withoutCount: PaginatedResultWithoutCount[User] = result.withoutCount
+val withCount: PaginatedResult[User] = withoutCountResult.withCount(total)
+```
+
 ## Bidirectional Pagination
 
-Slick Seeker supports both forward and backward navigation:
+Slick Seeker supports both forward and backward navigation with both `page()` and `pageWithoutCount()`:
 
 ```scala
 // Forward
