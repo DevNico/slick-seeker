@@ -29,6 +29,14 @@ final case class QueryWithCursor[E, U, C, CU, CVE](
     q.map(e => (e, toCursor(e)))
   }
 
+  /** Like [[project]], but selects `select(e)` instead of the whole element, e.g. only the ids of a joined query. */
+  def projectAs[P, PU](q: slick.lifted.Query[E, U, Seq])(select: E => P)(implicit
+      pShape: Shape[FlatShapeLevel, P, PU, P]
+  ): slick.lifted.Query[(P, C), (PU, CU), Seq] = {
+    implicit val pair: Shape[FlatShapeLevel, (P, C), (PU, CU), (P, C)] = Shape.tuple2Shape(pShape, cShape)
+    q.map(e => (select(e), toCursor(e)))
+  }
+
 }
 
 object QueryWithCursor {

@@ -4,6 +4,7 @@ import io.github.devnico.slickseeker.cursor.{CursorDirection, CursorEnvironment}
 import io.github.devnico.slickseeker.filter.{SeekerSortKey, ColumnSeekFilterTypes}
 import io.github.devnico.slickseeker.support.{QueryWithCursor, SortDirection}
 import slick.ast.{BaseTypedType, ScalaBaseType}
+import slick.dbio
 import slick.jdbc.JdbcProfile
 import slick.lifted
 
@@ -82,10 +83,62 @@ final case class SlickSeeker[E, U, CVE, C, CU](
       cursorEnvironment: CursorEnvironment[CVE],
       ec: ExecutionContext
   ): profile.api.DBIOAction[PaginatedResultWithoutCount[U], profile.api.NoStream, profile.api.Effect.Read] = {
-    // Explicitly import the api to make implicits available
     val theApi = profile.api
     import theApi._
+    pageRows[U](limit, cursor, maxLimit)(limited => streamableQueryActionExtensionMethods(qwc.project(limited)).result)
+  }
 
+  /** Like [[page]], but the items are `select(e)` instead of whole elements (see [[pageWithoutCountAs]]). */
+  def pageAs[P, PU, Profile <: JdbcProfile](
+      limit: Int,
+      cursor: Option[String],
+      maxLimit: Int = 100
+  )(select: E => P)(implicit
+      pShape: lifted.Shape[lifted.FlatShapeLevel, P, PU, P],
+      profile: Profile,
+      cursorEnvironment: CursorEnvironment[CVE],
+      ec: ExecutionContext
+  ): profile.api.DBIOAction[PaginatedResult[PU], profile.api.NoStream, profile.api.Effect.Read] = {
+    val theApi = profile.api
+    import theApi._
+    for {
+      total <- streamableQueryActionExtensionMethods(Query(baseQuery.map(_ => 1).length)).result.map(_.head)
+      result <-
+        pageWithoutCountAs[P, PU, Profile](limit, cursor, maxLimit)(select)(pShape, profile, cursorEnvironment, ec)
+    } yield result.withCount(total)
+  }
+
+  /** Like [[pageWithoutCount]], but the items are `select(e)` instead of whole elements. Filtering, sorting and the
+    * cursor still use the whole element, so a query can join tables for searching and sorting while a page selects only
+    * what it needs, e.g. ids whose rows are loaded separately.
+    */
+  def pageWithoutCountAs[P, PU, Profile <: JdbcProfile](
+      limit: Int,
+      cursor: Option[String],
+      maxLimit: Int = 100
+  )(select: E => P)(implicit
+      pShape: lifted.Shape[lifted.FlatShapeLevel, P, PU, P],
+      profile: Profile,
+      cursorEnvironment: CursorEnvironment[CVE],
+      ec: ExecutionContext
+  ): profile.api.DBIOAction[PaginatedResultWithoutCount[PU], profile.api.NoStream, profile.api.Effect.Read] = {
+    val theApi = profile.api
+    import theApi._
+    pageRows[PU](limit, cursor, maxLimit)(limited =>
+      streamableQueryActionExtensionMethods(qwc.projectAs(limited)(select)).result
+    )
+  }
+
+  private def pageRows[I](
+      limit: Int,
+      cursor: Option[String],
+      maxLimit: Int
+  )(
+      run: lifted.Query[E, U, Seq] => dbio.DBIOAction[Seq[(I, CU)], dbio.NoStream, dbio.Effect.Read]
+  )(implicit
+      cursorEnvironment: CursorEnvironment[CVE],
+      ec: ExecutionContext
+  ): dbio.DBIOAction[PaginatedResultWithoutCount[I], dbio.NoStream, dbio.Effect.Read] = {
     val decodedCursor = cursorEnvironment.decodeWithDirectionOrThrow(cursor)
     val isBackward    = decodedCursor.exists(_._1 == CursorDirection.Backward)
     val rawCursor     = decodedCursor.map(_._2)
@@ -94,16 +147,10 @@ final case class SlickSeeker[E, U, CVE, C, CU](
 
     val normalizedLimit = limit.max(1).min(maxLimit)
 
-    val resultsAction: DBIOAction[Seq[(U, CU)], NoStream, Effect.Read] = {
-      val filtered  = baseQuery.filter(buildFilter(_, queryColumns, rawCursor))
-      val sorted    = filtered.sortBy(buildOrdered(_, queryColumns))
-      val limited   = sorted.take(normalizedLimit + 1)
-      val projected = qwc.project(limited)
-      val ext       = streamableQueryActionExtensionMethods(projected)
-      ext.result
-    }
+    val filtered = baseQuery.filter(buildFilter(_, queryColumns, rawCursor))
+    val sorted   = filtered.sortBy(buildOrdered(_, queryColumns))
 
-    resultsAction.map { results =>
+    run(sorted.take(normalizedLimit + 1)).map { results =>
       val hasMoreResults = results.size > normalizedLimit
       val pageItems      = if (hasMoreResults) results.dropRight(1) else results
 
