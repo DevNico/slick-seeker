@@ -439,4 +439,5 @@ class SlickSeekerIntegrationSpec extends AnyWordSpec with Matchers with BeforeAn
       page.items shouldBe Seq("Charlie", "Eve")
     }
   }
+
 }

@@ -3,7 +3,7 @@ package io.github.devnico.slickseeker
 import io.github.devnico.slickseeker.cursor.{CursorEnvironment, CursorValueCodec}
 import io.github.devnico.slickseeker.filter.{ColumnSeekFilter, ColumnSeekFilterTypes, SeekerSortKey, SeekOrder}
 import io.github.devnico.slickseeker.pagination.SlickSeeker
-import slick.ast.{BaseTypedType, Ordering, ScalaBaseType}
+import slick.ast.{BaseTypedType, Ordering, ScalaBaseType, TypedType}
 import slick.jdbc.JdbcProfile
 import slick.lifted
 
@@ -62,6 +62,17 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
             case Ordering.Asc  => ordered.column > value || (ordered.column === value && prevCond)
             case Ordering.Desc => ordered.column < value || (ordered.column === value && prevCond)
           }
+
+        override def applyParam(
+            ordered: lifted.ColumnOrdered[T],
+            value: lifted.Rep[T],
+            valueIsNull: Boolean,
+            prevCond: FilterCond
+        ): FilterCond =
+          ordered.ord.direction match {
+            case Ordering.Asc  => ordered.column > value || (ordered.column === value && prevCond)
+            case Ordering.Desc => ordered.column < value || (ordered.column === value && prevCond)
+          }
       }
 
     implicit def seekFilterOptT[T](implicit btt: BaseTypedType[T]): ColumnSeekFilter[Option[T]] =
@@ -95,6 +106,30 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
               col.isEmpty && prevCond
           }
         }
+
+        override def applyParam(
+            ordered: lifted.ColumnOrdered[Option[T]],
+            v: lifted.Rep[Option[T]],
+            valueIsNull: Boolean,
+            prevCond: FilterCond
+        ): FilterCond = {
+          val col = ordered.column
+          (ordered.ord.direction, ordered.ord.nulls, valueIsNull) match {
+            case (Ordering.Asc, Ordering.NullsFirst, false) =>
+              (col > v) || (col === v && prevCond)
+            case (Ordering.Desc, Ordering.NullsFirst, false) =>
+              (col < v) || (col === v && prevCond)
+            case (_, Ordering.NullsFirst, true) =>
+              (col.isEmpty && prevCond) || col.isDefined
+
+            case (Ordering.Asc, _, false) =>
+              (col > v) || (col === v && prevCond) || col.isEmpty
+            case (Ordering.Desc, _, false) =>
+              (col < v) || (col === v && prevCond) || col.isEmpty
+            case (_, _, true) =>
+              col.isEmpty && prevCond
+          }
+        }
       }
   }
 
@@ -110,8 +145,9 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
         def mapCol(col: lifted.ColumnOrdered[T]): lifted.ColumnOrdered[T] = col
         def shape: lifted.Shape[lifted.FlatShapeLevel, lifted.Rep[T], T, lifted.Rep[T]] =
           lifted.Shape.repColumnShape[T, lifted.FlatShapeLevel](using btt)
-        def filter: ColumnSeekFilter[T]     = csf
-        def codec: CursorValueCodec[T, CVE] = cvc
+        def filter: ColumnSeekFilter[T]      = csf
+        def codec: CursorValueCodec[T, CVE]  = cvc
+        override def typedType: TypedType[T] = btt
       }
 
     // Identity mapping for Option types
@@ -125,8 +161,9 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
         def mapCol(c: lifted.ColumnOrdered[Option[T]]): lifted.ColumnOrdered[Option[T]] = c
         def shape: lifted.Shape[lifted.FlatShapeLevel, lifted.Rep[Option[T]], Option[T], lifted.Rep[Option[T]]] =
           optShape
-        def filter: ColumnSeekFilter[Option[T]]     = csf
-        def codec: CursorValueCodec[Option[T], CVE] = cvc
+        def filter: ColumnSeekFilter[Option[T]]      = csf
+        def codec: CursorValueCodec[Option[T], CVE]  = cvc
+        override def typedType: TypedType[Option[T]] = btt.optionType
       }
   }
 
@@ -159,8 +196,9 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
           lifted.Shape.repColumnShape[Int, lifted.FlatShapeLevel](using intType)
         }
 
-        def filter: ColumnSeekFilter[Int]     = csf
-        def codec: CursorValueCodec[Int, CVE] = cvc
+        def filter: ColumnSeekFilter[Int]      = csf
+        def codec: CursorValueCodec[Int, CVE]  = cvc
+        override def typedType: TypedType[Int] = intBaseType
       }
 
     // Custom ordering for Option types
@@ -189,8 +227,9 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
           lifted.Shape.repColumnShape[Int, lifted.FlatShapeLevel](using intType)
         }
 
-        def filter: ColumnSeekFilter[Int]     = csf
-        def codec: CursorValueCodec[Int, CVE] = cvc
+        def filter: ColumnSeekFilter[Int]      = csf
+        def codec: CursorValueCodec[Int, CVE]  = cvc
+        override def typedType: TypedType[Int] = intBaseType
       }
   }
 

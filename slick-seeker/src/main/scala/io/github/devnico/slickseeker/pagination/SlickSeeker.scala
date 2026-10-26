@@ -34,7 +34,8 @@ final case class SlickSeeker[E, U, CVE, C, CU](
       columns = columns :+ SeekColumn[E, U, K, CVE](
         t => sk.mapCol(col(t)),
         sk.filter,
-        sk.codec
+        sk.codec,
+        () => sk.typedType
       ),
       qwc = qwc.withSeekColumn(col)
     )
@@ -150,44 +151,67 @@ final case class SlickSeeker[E, U, CVE, C, CU](
     val filtered = baseQuery.filter(buildFilter(_, queryColumns, rawCursor))
     val sorted   = filtered.sortBy(buildOrdered(_, queryColumns))
 
-    run(sorted.take(normalizedLimit + 1)).map { results =>
-      val hasMoreResults = results.size > normalizedLimit
-      val pageItems      = if (hasMoreResults) results.dropRight(1) else results
+    run(sorted.take(normalizedLimit + 1)).map(results =>
+      toPage(results, isBackward, rawCursor.exists(_.nonEmpty), normalizedLimit)
+    )
+  }
 
-      val items = if (isBackward) pageItems.reverse else pageItems
+  /** A page of `normalizedLimit` items from up to `normalizedLimit + 1` rows with their cursor values. */
+  private[slickseeker] def toPage[I](
+      results: Seq[(I, CU)],
+      isBackward: Boolean,
+      hasCurrentCursor: Boolean,
+      normalizedLimit: Int
+  )(implicit cursorEnvironment: CursorEnvironment[CVE]): PaginatedResultWithoutCount[I] = {
+    val hasMoreResults = results.size > normalizedLimit
+    val pageItems      = if (hasMoreResults) results.dropRight(1) else results
 
-      val hasCurrentCursor = rawCursor.isDefined && rawCursor.get.nonEmpty
+    val items = if (isBackward) pageItems.reverse else pageItems
 
-      val hasNext = if (isBackward) {
-        items.nonEmpty && hasCurrentCursor
-      } else {
-        hasMoreResults
-      }
+    val hasNext = if (isBackward) items.nonEmpty && hasCurrentCursor else hasMoreResults
+    val hasPrev = if (isBackward) hasMoreResults else hasCurrentCursor
 
-      val hasPrev = if (isBackward) {
-        hasMoreResults
-      } else {
-        hasCurrentCursor
-      }
+    val nextCursor =
+      if (hasNext && items.nonEmpty)
+        Some(cursorEnvironment.encode(encodeCursor(items.last._2), CursorDirection.Forward))
+      else None
 
-      val nextCursor = if (hasNext && items.nonEmpty) {
-        val item         = items.last
-        val cursorValues = encodeCursor(item._2)
-        Some(cursorEnvironment.encode(cursorValues, CursorDirection.Forward))
-      } else None
+    val prevCursor =
+      if (hasPrev && items.nonEmpty)
+        Some(cursorEnvironment.encode(encodeCursor(items.head._2), CursorDirection.Backward))
+      else None
 
-      val prevCursor = if (hasPrev && items.nonEmpty) {
-        val item         = items.head
-        val cursorValues = encodeCursor(item._2)
-        Some(cursorEnvironment.encode(cursorValues, CursorDirection.Backward))
-      } else None
+    PaginatedResultWithoutCount(items = items.map(_._1), nextCursor = nextCursor, prevCursor = prevCursor)
+  }
 
-      PaginatedResultWithoutCount(
-        items = items.map(_._1),
-        nextCursor = nextCursor,
-        prevCursor = prevCursor
-      )
+  /** The page query with the cursor values (`cursor`: the parameters of [[QueryWithCursor.paramShape]]) and the limit
+    * bound as parameters, for [[CompiledSeekPage]]. Its form depends only on `isBackward` and `nullFlags` (which cursor
+    * values are `None`), so one compiled query per combination serves every cursor.
+    */
+  private[slickseeker] def paramPageQuery[P, PU](
+      cursor: Option[Any],
+      nullFlags: List[Boolean],
+      isBackward: Boolean,
+      limit: lifted.ConstColumn[Long]
+  )(select: E => P)(implicit
+      pShape: lifted.Shape[lifted.FlatShapeLevel, P, PU, P]
+  ): lifted.Query[(P, C), (PU, CU), Seq] = {
+    val queryColumns = if (isBackward) columns.map(_.reversed) else columns
+    val filtered = cursor match {
+      case None => baseQuery
+      case Some(params) =>
+        val reps = flattenParams(params)
+        baseQuery.filter { table =>
+          reps
+            .zip(nullFlags)
+            .zip(queryColumns)
+            .reverse
+            .foldLeft[FilterCond](alwaysFalse) { case (prevCond, ((rep, isNull), column)) =>
+              column.appendToFilterParam(table, rep, isNull, prevCond)
+            }
+        }
     }
+    qwc.projectAs(filtered.sortBy(buildOrdered(_, queryColumns)).take(limit))(select)
   }
 
   private def encodeCursor(projectedCursor: CU): Vector[CVE] =
@@ -216,6 +240,12 @@ final case class SlickSeeker[E, U, CVE, C, CU](
 
 object SlickSeeker {
   import ColumnSeekFilterTypes._
+
+  // Cursor parameters nest as (last column, (…, (first column, seed))); the seed is not a cursor column.
+  private def flattenParams(params: Any): List[lifted.Rep[?]] = params match {
+    case (head: lifted.Rep[?], tail) => flattenParams(tail) :+ head
+    case _                           => Nil
+  }
 
   private def alwaysTrue: FilterCond = {
     implicit val typedType: slick.ast.TypedType[Boolean] = ScalaBaseType.booleanType

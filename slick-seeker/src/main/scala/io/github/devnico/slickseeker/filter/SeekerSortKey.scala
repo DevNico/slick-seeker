@@ -1,7 +1,7 @@
 package io.github.devnico.slickseeker.filter
 
 import io.github.devnico.slickseeker.cursor.CursorValueCodec
-import slick.ast.BaseTypedType
+import slick.ast.{BaseTypedType, TypedType}
 import slick.lifted.{ColumnOrdered, FlatShapeLevel, Rep, Shape}
 
 trait SeekerSortKey[T, K, CVE] {
@@ -9,6 +9,10 @@ trait SeekerSortKey[T, K, CVE] {
   def shape: Shape[FlatShapeLevel, Rep[K], K, Rep[K]]
   def filter: ColumnSeekFilter[K]
   def codec: CursorValueCodec[K, CVE]
+
+  /** The type of the sort key, needed to bind cursor values as query parameters ([[pagination.CompiledSeekPage]]). */
+  def typedType: TypedType[K] =
+    throw new UnsupportedOperationException(s"${getClass.getName} does not support compiled pages (no typedType)")
 }
 
 // Note: SeekerSortKey implicits are provided by SlickSeekerSupport trait
