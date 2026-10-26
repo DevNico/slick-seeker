@@ -16,12 +16,12 @@ class CompiledSeekPageSpec extends AnyWordSpec with Matchers with BeforeAndAfter
 
   // Codecs that parse cursor values back into their types, as bound parameters need them.
   implicit val intCodec: CursorValueCodec[Int, String] = new CursorValueCodec[Int, String] {
-    def encode(value: Int): String              = value.toString
-    def decode(value: String): Option[Int]      = value.toIntOption
+    def encode(value: Int): String         = value.toString
+    def decode(value: String): Option[Int] = value.toIntOption
   }
   implicit val optionStringCodec: CursorValueCodec[Option[String], String] =
     new CursorValueCodec[Option[String], String] {
-      def encode(value: Option[String]): String         = value.fold("N")("S" + _)
+      def encode(value: Option[String]): String = value.fold("N")("S" + _)
       def decode(value: String): Option[Option[String]] =
         if (value == "N") Some(None) else if (value.startsWith("S")) Some(Some(value.drop(1))) else None
     }
@@ -102,12 +102,12 @@ class CompiledSeekPageSpec extends AnyWordSpec with Matchers with BeforeAndAfter
     "reuse its compiled forms for other parameter and cursor values" in {
       val first  = await(db.run(byMinAge.pageWithoutCount(params = 0, limit = 2, cursor = None)))
       val second = await(db.run(byMinAge.pageWithoutCount(params = 0, limit = 2, cursor = first.nextCursor)))
-      val forms  = byMinAge.compiledForms
+      val forms  = byMinAge.createdForms
       val other  = await(db.run(byMinAge.pageWithoutCount(params = 26, limit = 4, cursor = None)))
       await(db.run(byMinAge.pageWithoutCount(params = 26, limit = 4, cursor = other.nextCursor)))
       await(db.run(byMinAge.pageWithoutCount(params = 0, limit = 2, cursor = second.nextCursor)))
 
-      byMinAge.compiledForms shouldBe forms
+      byMinAge.createdForms shouldBe forms
     }
 
     "compile one form per direction and None pattern of the cursor" in {
@@ -121,7 +121,7 @@ class CompiledSeekPageSpec extends AnyWordSpec with Matchers with BeforeAndAfter
       await(db.run(fresh.pageWithoutCount(params = 0, limit = 3, cursor = second.prevCursor)))
 
       nullCursor.items shouldBe Seq(9)
-      fresh.compiledForms shouldBe 4 // first page, forward, forward after None, backward
+      fresh.createdForms shouldBe 4 // first page, forward, forward after None, backward
     }
   }
 }

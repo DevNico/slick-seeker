@@ -214,6 +214,46 @@ final case class SlickSeeker[E, U, CVE, C, CU](
     qwc.projectAs(filtered.sortBy(buildOrdered(_, queryColumns)).take(limit))(select)
   }
 
+  /** The cursor values as parameters, nested like the cursor columns `(last, (…, (first, seed)))`; for
+    * [[CompiledSeekPage]]. Needs the sort keys' `typedType`.
+    */
+  private[slickseeker] def cursorParamShape: lifted.Shape[lifted.ColumnsShapeLevel, Any, Any, Any] =
+    columns.foldLeft[lifted.Shape[lifted.ColumnsShapeLevel, Any, Any, Any]](
+      lifted.Shape.primitiveShape[Int, lifted.ColumnsShapeLevel](ScalaBaseType.intType).asInstanceOf[
+        lifted.Shape[lifted.ColumnsShapeLevel, Any, Any, Any]
+      ]
+    ) { (tail, column) =>
+      lifted.Shape
+        .tuple2Shape(
+          lifted.Shape.primitiveShape[Any, lifted.ColumnsShapeLevel](
+            column.typedType().asInstanceOf[slick.ast.TypedType[Any]]
+          ),
+          tail
+        )
+        .asInstanceOf[lifted.Shape[lifted.ColumnsShapeLevel, Any, Any, Any]]
+    }
+
+  /** The cursor values decoded and nested like [[cursorParamShape]], or None if they don't fit the columns. */
+  private[slickseeker] def decodeCursorParams(values: Seq[CVE]): Option[Any] =
+    if (values.size != columns.size) None
+    else
+      columns.zip(values).foldLeft[Option[Any]](Some(0)) { case (tail, (column, value)) =>
+        for {
+          t <- tail
+          v <- column.codec.decode(value)
+        } yield (v, t)
+      }
+
+  /** Which cursor values of [[decodeCursorParams]] are `None`, first column first. */
+  private[slickseeker] def cursorNullFlags(params: Any): List[Boolean] = params match {
+    case (value, tail) => cursorNullFlags(tail) :+ (value == None)
+    case _             => Nil
+  }
+
+  /** Cursor columns of an `Option` type: each has a form for `None` cursor values in [[CompiledSeekPage]]. */
+  private[slickseeker] def nullableCursorColumns: Int =
+    columns.count(_.typedType().isInstanceOf[slick.ast.OptionType])
+
   private def encodeCursor(projectedCursor: CU): Vector[CVE] =
     qwc.encode(projectedCursor).toVector
 

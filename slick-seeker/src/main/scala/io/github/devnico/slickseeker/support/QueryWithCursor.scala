@@ -4,18 +4,11 @@ import io.github.devnico.slickseeker.filter.SeekerSortKey
 import slick.ast.{BaseTypedType, TypedType}
 
 // Import only what we need from Slick, avoiding wildcards
-import slick.lifted.{ColumnOrdered, ColumnsShapeLevel, FlatShapeLevel, LiteralColumn, Rep, Shape}
+import slick.lifted.{ColumnOrdered, FlatShapeLevel, LiteralColumn, Rep, Shape}
 
-/** The cursor columns of a seeker: `toCursor` selects them from an element, `encode` / `decode` convert their values to
-  * and from cursor values, `paramShape` binds their values as query parameters and `nullFlags` tells which are `None`
-  * (the last three for [[io.github.devnico.slickseeker.pagination.CompiledSeekPage]]).
-  */
 final case class QueryWithCursor[E, U, C, CU, CVE](
     toCursor: E => C,
-    encode: CU => List[CVE],
-    decode: List[CVE] => Option[CU] = QueryWithCursor.noDecode[CVE, CU],
-    paramShape: () => Shape[ColumnsShapeLevel, CU, CU, ?] = QueryWithCursor.noParamShape[CU],
-    nullFlags: CU => List[Boolean] = QueryWithCursor.noNullFlags[CU]
+    encode: CU => List[CVE]
 )(implicit
     val queryShape: Shape[FlatShapeLevel, E, U, E],
     val cShape: Shape[FlatShapeLevel, C, CU, C]
@@ -27,15 +20,7 @@ final case class QueryWithCursor[E, U, C, CU, CVE](
     implicit val shape: Shape[FlatShapeLevel, Rep[K], K, Rep[K]] = sk.shape
     QueryWithCursor(
       e => (sk.mapCol(col(e)).column, toCursor(e)),
-      { case (h, t) => encode(t) :+ sk.codec.encode(h) },
-      values =>
-        if (values.isEmpty) None
-        else for {
-          h <- sk.codec.decode(values.last)
-          t <- decode(values.init)
-        } yield (h, t),
-      () => Shape.tuple2Shape(Shape.primitiveShape[K, ColumnsShapeLevel](sk.typedType), paramShape()),
-      { case (h, t) => nullFlags(t) :+ (h == None) }
+      { case (h, t) => encode(t) :+ sk.codec.encode(h) }
     )
   }
 
@@ -55,20 +40,9 @@ final case class QueryWithCursor[E, U, C, CU, CVE](
 }
 
 object QueryWithCursor {
-  def noDecode[CVE, CU]: List[CVE] => Option[CU] = _ => None
-  def noParamShape[CU]: () => Shape[ColumnsShapeLevel, CU, CU, ?] =
-    () => throw new UnsupportedOperationException("This seeker does not support compiled pages")
-  def noNullFlags[CU]: CU => List[Boolean] = _ => Nil
-
   def seed[E, U, CVE](implicit
       shape: Shape[FlatShapeLevel, E, U, E],
       btt: BaseTypedType[Int]
   ): QueryWithCursor[E, U, Rep[Int], Int, CVE] =
-    QueryWithCursor(
-      _ => LiteralColumn(0),
-      _ => Nil,
-      values => if (values.isEmpty) Some(0) else None,
-      () => Shape.primitiveShape[Int, ColumnsShapeLevel](btt),
-      _ => Nil
-    )
+    QueryWithCursor(_ => LiteralColumn(0), _ => Nil)
 }

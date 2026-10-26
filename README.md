@@ -12,6 +12,7 @@ Type-safe, high-performance cursor-based pagination for Slick 3.5+.
 - **Type-Safe** - Compile-time cursor/column verification
 - **Flexible** - Nulls handling, custom enum orders
 - **Projections** - Page a selection (e.g. ids) of a joined query with `pageAs` / `pageWithoutCountAs`
+- **Compiled Pages** - `CompiledSeekPage` binds parameters, cursor values and limit, so Slick compiles each page query once
 - **Composable** - Chain decorators for Base64, compression, encryption
 - **Profile Agnostic** - Works with any Slick JDBC profile (PostgreSQL, MySQL, H2, SQLite, etc.)
 
