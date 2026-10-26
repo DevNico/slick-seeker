@@ -106,7 +106,10 @@ class CompiledSeekPageEquivalenceSpec extends AnyWordSpec with Matchers with Bef
     configs.foreach { case (name, config) =>
       s"match the ad-hoc seeker for every reachable cursor: $name" in {
         val page = compiled(config)
-        for (limit <- Seq(1, 2, 5, 0, -3, 500); minId <- Seq(0, 7, 99)) {
+        for {
+          limit <- Seq(1, 2, 5, 0, -3, 500)
+          minId <- Seq(0, 7, 99)
+        } {
           // Every cursor reachable from the first page, following next and prev cursors.
           @tailrec def check(pending: List[Option[String]], seen: Set[Option[String]]): Unit = pending match {
             case Nil => ()
@@ -125,7 +128,7 @@ class CompiledSeekPageEquivalenceSpec extends AnyWordSpec with Matchers with Bef
     }
 
     "count its query in page" in {
-      val page = compiled(configs.head._2)
+      val page   = compiled(configs.head._2)
       val result = await(db.run(page.page(params = 7, limit = 2, cursor = None)))
       result.total shouldBe 17
       result.items shouldBe await(db.run(adHoc(configs.head._2, 7).pageWithoutCountAs(2, None)(_.id))).items

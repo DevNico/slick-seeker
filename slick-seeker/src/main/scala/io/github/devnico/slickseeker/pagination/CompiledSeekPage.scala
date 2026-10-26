@@ -57,23 +57,26 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
 
   private def placeholder[T](what: String): Any => T = _ => throw new IllegalStateException(s"$what (structure only)")
 
-  // The seeker's structure (cursor columns and their types) without real parameters; nothing is executed.
-  private val structure: SlickSeeker[E, U, CVE, Any, Any] = build(appShape.buildParams(placeholder("parameter")))
+  // The cursor (columns, types, encoding) from the seeker's structure without real parameters: nothing is executed and
+  // the structure's query is not kept.
+  private val cursorSupport: SeekCursorSupport[E, U, CVE, Any, Any] = {
+    val structure = build(appShape.buildParams(placeholder("parameter")))
+    // Fails here rather than on the first cursor page if a sort key or filter cannot bind parameters.
+    structure.paramPageQuery[P, PU](
+      Some(structure.cursorSupport.paramShape.buildParams(placeholder("cursor value"))),
+      List.fill(structure.columns.size)(false),
+      isBackward = false,
+      limitShape.buildParams(placeholder("limit"))
+    )(select)
+    structure.cursorSupport
+  }
 
-  private val cursorShape = structure.cursorParamShape
-
-  // Fails here rather than on the first cursor page if a sort key or filter cannot bind parameters.
-  structure.paramPageQuery[P, PU](
-    Some(cursorShape.buildParams(placeholder("cursor value"))),
-    List.fill(structure.columns.size)(false),
-    isBackward = false,
-    limitShape.buildParams(placeholder("limit"))
-  )(select)
+  private val cursorShape = cursorSupport.paramShape
 
   /** The most page query forms this instance can create: the first page, and forward and backward per combination of
     * `None` values in nullable cursor columns.
     */
-  val maxForms: Int = 1 + 2 * (1 << structure.nullableCursorColumns)
+  val maxForms: Int = 1 + 2 * (1 << cursorSupport.nullableColumns)
 
   private val firstPage = compile[(AU, Long), PageQuery, Rows](Shape.tuple2Shape(appShape, limitShape)) { params =>
     val (a, limit) = params.asInstanceOf[(A, ConstColumn[Long])]
@@ -135,18 +138,18 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     val decoded = cursorEnvironment
       .decodeWithDirectionOrThrow(cursor)
       .flatMap { case (direction, values) =>
-        structure.decodeCursorParams(values).map(cursorValues => (direction == CursorDirection.Backward, cursorValues))
+        cursorSupport.decodeParams(values).map(cursorValues => (direction == CursorDirection.Backward, cursorValues))
       }
 
     val rows: DBIOAction[Rows, NoStream, Effect.Read] = decoded match {
       case None =>
         firstPage((params, fetchLimit)).result
       case Some((isBackward, cursorValues)) =>
-        cursorPage(isBackward, structure.cursorNullFlags(cursorValues))((params, cursorValues, fetchLimit)).result
+        cursorPage(isBackward, cursorSupport.nullFlags(cursorValues))((params, cursorValues, fetchLimit)).result
     }
 
     rows.map { results =>
-      structure.toPage(results, decoded.exists(_._1), hasCurrentCursor = decoded.isDefined, normalizedLimit)
+      cursorSupport.toPage(results, decoded.exists(_._1), hasCurrentCursor = decoded.isDefined, normalizedLimit)
     }
   }
 }
