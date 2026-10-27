@@ -10,6 +10,7 @@ final private[slickseeker] case class SeekCursorSupport[E, U, CVE, C, CU](
     columns: Vector[SeekColumn[E, U, CVE]],
     qwc: QueryWithCursor[E, U, C, CU, CVE]
 ) {
+  private type AnyShape = Shape[ColumnsShapeLevel, Any, Any, Any]
 
   /** A page of `normalizedLimit` items from up to `normalizedLimit + 1` rows with their cursor values. */
   def toPage[I](
@@ -39,21 +40,11 @@ final private[slickseeker] case class SeekCursorSupport[E, U, CVE, C, CU](
   /** The cursor values as parameters, nested like the cursor columns `(last, (…, (first, seed)))`. Needs the sort keys'
     * `typedType`.
     */
-  def paramShape: Shape[ColumnsShapeLevel, Any, Any, Any] =
-    columns.foldLeft(
-      Shape.primitiveShape[Int, ColumnsShapeLevel](ScalaBaseType.intType).asInstanceOf[Shape[
-        ColumnsShapeLevel,
-        Any,
-        Any,
-        Any
-      ]]
-    ) { (tail, column) =>
-      Shape
-        .tuple2Shape(
-          Shape.primitiveShape[Any, ColumnsShapeLevel](column.typedType().asInstanceOf[TypedType[Any]]),
-          tail
-        )
-        .asInstanceOf[Shape[ColumnsShapeLevel, Any, Any, Any]]
+  def paramShape: AnyShape =
+    columns.foldLeft(Shape.primitiveShape[Int, ColumnsShapeLevel](ScalaBaseType.intType).asInstanceOf[AnyShape]) {
+      (tail, column) =>
+        val head = Shape.primitiveShape[Any, ColumnsShapeLevel](column.typedType().asInstanceOf[TypedType[Any]])
+        Shape.tuple2Shape(head, tail).asInstanceOf[AnyShape]
     }
 
   /** The cursor values decoded and nested like [[paramShape]], or None if they don't fit the columns. */

@@ -34,10 +34,12 @@ import scala.concurrent.ExecutionContext
   * [[SlickSeeker.pageWithoutCountAs]]. Cursors whose values don't decode or don't match the cursor columns give the
   * first page (the ad-hoc seeker partly filters on them instead).
   *
-  * Requirements: the sort keys provide [[io.github.devnico.slickseeker.filter.SeekerSortKey.typedType]] and their
-  * filters [[io.github.devnico.slickseeker.filter.ColumnSeekFilter.applyParam]] (the built-in ones do; checked on
-  * creation), and the cursor value codecs decode values of their real type (bound parameters are not rendered via
-  * `toString` like literals).
+  * Requirements: at least one seek column; the sort keys provide
+  * [[io.github.devnico.slickseeker.filter.SeekerSortKey.typedType]] and their filters
+  * [[io.github.devnico.slickseeker.filter.ColumnSeekFilter.applyParam]] (the built-in ones do; both checked on
+  * creation); the cursor value codecs decode values of their real type (bound parameters are not rendered via
+  * `toString` like literals); cursor values bind with the column's JDBC type, so e.g. PostgreSQL enums mapped to
+  * `String` need a type binding as `Types.OTHER` (see the docs).
   */
 final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     build: A => SlickSeeker[E, U, CVE, Any, Any],
