@@ -205,6 +205,14 @@ byMinAge.pageWithoutCount(params = 30, limit = 20, cursor = None)   // or .page(
 - Cursor value codecs must decode values of their real type (bound parameters, unlike literals, are not rendered
   via `toString`). Custom `SeekerSortKey`s and `ColumnSeekFilter`s need `typedType` and `applyParam` (the built-in ones
   have them); a missing one fails when the `CompiledSeekPage` is created.
+- Cursor values are bound with the sort column's JDBC type, while the ad-hoc seeker writes untyped literals. A
+  PostgreSQL enum mapped with `MappedColumnType.base[E, String]` is bound as `varchar`, and `enum_col > varchar` does not
+  exist: map such enums to a type that binds as `Types.OTHER` (e.g. slick-pg's enum support) or set
+  `stringtype=unspecified` in the JDBC URL.
+- With bound parameters, the database may reuse a generic plan (PostgreSQL after five executions of a server-side
+  prepared statement). Check the plans of hot page queries; `plan_cache_mode = force_custom_plan` restores per-value
+  planning while keeping the saved compilation.
+- The seeker needs at least one seek column.
 - `SlickPgTupleSeeker` is not supported.
 
 ## Bidirectional Pagination

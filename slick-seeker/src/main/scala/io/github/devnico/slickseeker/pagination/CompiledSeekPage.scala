@@ -42,7 +42,7 @@ import scala.concurrent.ExecutionContext
 final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     build: A => SlickSeeker[E, U, CVE, Any, Any],
     select: E => P,
-    maxLimit: Int
+    defaultMaxLimit: Int
 )(implicit
     appShape: Shape[ColumnsShapeLevel, AU, AU, A],
     selectShape: Shape[FlatShapeLevel, P, PU, P],
@@ -61,6 +61,7 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
   // the structure's query is not kept.
   private val cursorSupport: SeekCursorSupport[E, U, CVE, Any, Any] = {
     val structure = build(appShape.buildParams(placeholder("parameter")))
+    require(structure.columns.nonEmpty, "CompiledSeekPage needs a seeker with at least one seek column")
     // Fails here rather than on the first cursor page if a sort key or filter cannot bind parameters.
     structure.paramPageQuery[P, PU](
       Some(structure.cursorSupport.paramShape.buildParams(placeholder("cursor value"))),
@@ -97,7 +98,9 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     )
 
   private lazy val count = compile[AU, Rep[Int], Int](appShape) { params =>
-    build(params.asInstanceOf[A]).baseQuery.length
+    implicit val intType: TypedType[Int] = ScalaBaseType.intType
+    // Same count as SlickSeeker.page: no element columns in the counted subquery.
+    build(params.asInstanceOf[A]).baseQuery.map(_ => slick.lifted.LiteralColumn(1)).length
   }(Executable.scalarIsExecutable(Shape.repColumnShape[Int, FlatShapeLevel](ScalaBaseType.intType)))
 
   private def compile[PV, R <: Rep[?], RU](paramShape: Shape[ColumnsShapeLevel, PV, PV, ?])(query: Any => R)(implicit
@@ -115,7 +118,7 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
   def createdForms: Int = 1 + cursorPages.size
 
   /** Like [[SlickSeeker.pageAs]]: a page with the total count of the seeker's query. */
-  def page(params: AU, limit: Int, cursor: Option[String], maxLimit: Int = maxLimit)(implicit
+  def page(params: AU, limit: Int, cursor: Option[String], maxLimit: Int = defaultMaxLimit)(implicit
       cursorEnvironment: CursorEnvironment[CVE],
       ec: ExecutionContext
   ): dbio.DBIOAction[PaginatedResult[PU], dbio.NoStream, dbio.Effect.Read] = {
@@ -127,7 +130,7 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
   }
 
   /** Like [[SlickSeeker.pageWithoutCountAs]]: a page without total count. */
-  def pageWithoutCount(params: AU, limit: Int, cursor: Option[String], maxLimit: Int = maxLimit)(implicit
+  def pageWithoutCount(params: AU, limit: Int, cursor: Option[String], maxLimit: Int = defaultMaxLimit)(implicit
       cursorEnvironment: CursorEnvironment[CVE],
       ec: ExecutionContext
   ): dbio.DBIOAction[PaginatedResultWithoutCount[PU], dbio.NoStream, dbio.Effect.Read] = {

@@ -152,18 +152,9 @@ final case class SlickSeeker[E, U, CVE, C, CU](
     val sorted   = filtered.sortBy(buildOrdered(_, queryColumns))
 
     run(sorted.take(normalizedLimit + 1)).map(results =>
-      toPage(results, isBackward, rawCursor.exists(_.nonEmpty), normalizedLimit)
+      cursorSupport.toPage(results, isBackward, rawCursor.exists(_.nonEmpty), normalizedLimit)
     )
   }
-
-  /** A page of `normalizedLimit` items from up to `normalizedLimit + 1` rows with their cursor values. */
-  private[slickseeker] def toPage[I](
-      results: Seq[(I, CU)],
-      isBackward: Boolean,
-      hasCurrentCursor: Boolean,
-      normalizedLimit: Int
-  )(implicit cursorEnvironment: CursorEnvironment[CVE]): PaginatedResultWithoutCount[I] =
-    cursorSupport.toPage(results, isBackward, hasCurrentCursor, normalizedLimit)
 
   /** The cursor of this seeker without its query, for [[CompiledSeekPage]]. */
   private[slickseeker] def cursorSupport: SeekCursorSupport[E, U, CVE, C, CU] = SeekCursorSupport(columns, qwc)

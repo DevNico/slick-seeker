@@ -177,6 +177,11 @@ class CompiledSeekPageEquivalenceSpec extends AnyWordSpec with Matchers with Bef
         CompiledSeekPage[Unit]((_: Unit) => rows.toSeeker.seek(_.id.asc)(withoutType))(_.id)
     }
 
+    "reject a seeker without seek columns" in {
+      an[IllegalArgumentException] should be thrownBy
+        CompiledSeekPage[Unit]((_: Unit) => rows.toSeeker)(_.id)
+    }
+
     "bind tuple, Option and Unit parameters and select whole rows" in {
       val byTag = CompiledSeekPage[(Int, Option[String])]((p: (ConstColumn[Int], ConstColumn[Option[String]])) =>
         rows.filter(r => r.id >= p._1 && (p._2.isEmpty || !(r.tag =!= p._2))).toSeeker.seek(_.id.asc)

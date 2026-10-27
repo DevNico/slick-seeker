@@ -6,7 +6,7 @@ import slick.ast.{OptionType, ScalaBaseType, TypedType}
 import slick.lifted.{ColumnsShapeLevel, Shape}
 
 /** The cursor of a seeker (its columns and their encoding) without its query; for [[CompiledSeekPage]]. */
-private[slickseeker] final case class SeekCursorSupport[E, U, CVE, C, CU](
+final private[slickseeker] case class SeekCursorSupport[E, U, CVE, C, CU](
     columns: Vector[SeekColumn[E, U, CVE]],
     qwc: QueryWithCursor[E, U, C, CU, CVE]
 ) {
@@ -26,7 +26,8 @@ private[slickseeker] final case class SeekCursorSupport[E, U, CVE, C, CU](
     val hasNext = if (isBackward) items.nonEmpty && hasCurrentCursor else hasMoreResults
     val hasPrev = if (isBackward) hasMoreResults else hasCurrentCursor
 
-    def cursor(values: CU, direction: CursorDirection) = cursorEnvironment.encode(qwc.encode(values).toVector, direction)
+    def cursor(values: CU, direction: CursorDirection) =
+      cursorEnvironment.encode(qwc.encode(values).toVector, direction)
 
     PaginatedResultWithoutCount(
       items = items.map(_._1),
@@ -35,15 +36,23 @@ private[slickseeker] final case class SeekCursorSupport[E, U, CVE, C, CU](
     )
   }
 
-  /** The cursor values as parameters, nested like the cursor columns `(last, (…, (first, seed)))`. Needs the sort
-    * keys' `typedType`.
+  /** The cursor values as parameters, nested like the cursor columns `(last, (…, (first, seed)))`. Needs the sort keys'
+    * `typedType`.
     */
   def paramShape: Shape[ColumnsShapeLevel, Any, Any, Any] =
     columns.foldLeft(
-      Shape.primitiveShape[Int, ColumnsShapeLevel](ScalaBaseType.intType).asInstanceOf[Shape[ColumnsShapeLevel, Any, Any, Any]]
+      Shape.primitiveShape[Int, ColumnsShapeLevel](ScalaBaseType.intType).asInstanceOf[Shape[
+        ColumnsShapeLevel,
+        Any,
+        Any,
+        Any
+      ]]
     ) { (tail, column) =>
       Shape
-        .tuple2Shape(Shape.primitiveShape[Any, ColumnsShapeLevel](column.typedType().asInstanceOf[TypedType[Any]]), tail)
+        .tuple2Shape(
+          Shape.primitiveShape[Any, ColumnsShapeLevel](column.typedType().asInstanceOf[TypedType[Any]]),
+          tail
+        )
         .asInstanceOf[Shape[ColumnsShapeLevel, Any, Any, Any]]
     }
 
