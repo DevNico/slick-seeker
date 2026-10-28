@@ -1,5 +1,6 @@
 package io.github.devnico.slickseeker.pagination
 
+import scala.annotation.nowarn
 import io.github.devnico.slickseeker.cursor._
 import io.github.devnico.slickseeker.support.MyH2Profile
 import org.scalatest.BeforeAndAfterAll
@@ -11,6 +12,8 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import java.sql.Timestamp
 
+// The deprecated tuple seeker, until it is removed
+@nowarn("cat=deprecation")
 class PgTupleSeekerSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
 
   implicit val ec: ExecutionContext = ExecutionContext.global

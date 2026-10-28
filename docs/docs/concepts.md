@@ -333,7 +333,6 @@ byMinAge.pageWithoutCount(params = 30, limit = 20, cursor = None)   // or .page(
   and for cursor values a codec decoded as another type than the column's.
 - Generic plans: see [Cursor Values as Parameters](#cursor-values-as-parameters).
 - The seeker needs at least one seek column.
-- `SlickPgTupleSeeker` is not supported; `toSeeker` seekers use the same row value comparisons where they qualify.
 
 ## Bidirectional Pagination
 
