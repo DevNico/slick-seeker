@@ -78,14 +78,29 @@ lazy val core = (project in file("slick-seeker"))
     commonSettings,
     name := "slick-seeker",
     libraryDependencies ++= Seq(
-      "com.typesafe.slick" %% "slick"     % slickVersion,
-      "com.h2database"      % "h2"        % "2.4.240" % Test,
-      "org.slf4j"           % "slf4j-nop" % "2.0.17"  % Test,
-      // Real PostgreSQL for PostgreSqlSpec (needs Docker; the spec is canceled without it)
-      "org.testcontainers" % "testcontainers-postgresql" % "2.0.5"   % Test,
-      "org.postgresql"     % "postgresql"                % "42.7.14" % Test,
-      "org.hsqldb"         % "hsqldb"                    % "2.7.4"   % Test
-    )
+      "com.typesafe.slick" %% "slick"       % slickVersion,
+      "com.h2database"      % "h2"          % "2.4.240"  % Test,
+      "org.slf4j"           % "slf4j-nop"   % "2.0.17"   % Test,
+      "org.hsqldb"          % "hsqldb"      % "2.7.4"    % Test,
+      "org.xerial"          % "sqlite-jdbc" % "3.53.4.0" % Test,
+      // Derby 10.17 needs Java 21: its suite only runs when selected (see TestDatabase)
+      "org.apache.derby" % "derby"      % "10.17.1.0" % Test,
+      "org.apache.derby" % "derbytools" % "10.17.1.0" % Test,
+      // Real databases for the database suites (Testcontainers, only when selected; see TestDatabase)
+      "org.testcontainers"       % "testcontainers-postgresql"  % "2.0.5"        % Test,
+      "org.testcontainers"       % "testcontainers-mysql"       % "2.0.5"        % Test,
+      "org.testcontainers"       % "testcontainers-mariadb"     % "2.0.5"        % Test,
+      "org.testcontainers"       % "testcontainers-mssqlserver" % "2.0.5"        % Test,
+      "org.testcontainers"       % "testcontainers-oracle-free" % "2.0.5"        % Test,
+      "org.testcontainers"       % "testcontainers-cockroachdb" % "2.0.5"        % Test,
+      "org.postgresql"           % "postgresql"                 % "42.7.14"      % Test,
+      "com.mysql"                % "mysql-connector-j"          % "9.7.0"        % Test,
+      "org.mariadb.jdbc"         % "mariadb-java-client"        % "3.5.11"       % Test,
+      "com.microsoft.sqlserver"  % "mssql-jdbc"                 % "13.6.1.jre11" % Test,
+      "com.oracle.database.jdbc" % "ojdbc11"                    % "23.26.3.0.0"  % Test
+    ),
+    // One suite at a time: selected database suites each start (and stop) their own container
+    Test / parallelExecution := false
   )
 
 lazy val playJson = (project in file("addons/play-json"))

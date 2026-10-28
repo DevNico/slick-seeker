@@ -1,6 +1,7 @@
 package io.github.devnico.slickseeker.pagination
 
 import io.github.devnico.slickseeker.cursor._
+import io.github.devnico.slickseeker.databases.TestDatabase
 import io.github.devnico.slickseeker.support.{
   ChainPgProfile,
   MyPgProfile,
@@ -11,7 +12,6 @@ import io.github.devnico.slickseeker.support.{
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
-import org.testcontainers.DockerClientFactory
 import org.testcontainers.postgresql.PostgreSQLContainer
 import MyPgProfile.api._
 import slick.jdbc.JdbcProfile
@@ -28,8 +28,9 @@ object Level {
   case object Mid  extends Level
 }
 
-// Seekers against a real PostgreSQL (Testcontainers; canceled without Docker): native enums and uuids mapped to String,
-// REAL columns and default nulls, for ad-hoc and compiled pages with and without row value comparisons.
+// Seekers against a real PostgreSQL (Testcontainers; only if `postgresql` is selected, see TestDatabase): native enums
+// and uuids mapped to String, REAL columns and default nulls, for ad-hoc and compiled pages with and without row value
+// comparisons.
 class PostgreSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
   implicit val ec: ExecutionContext = ExecutionContext.global
 
@@ -86,10 +87,8 @@ class PostgreSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
   }
   val items = TableQuery[Items]
 
-  val dockerAvailable: Boolean = scala.util.Try(DockerClientFactory.instance().isDockerAvailable).getOrElse(false)
-  // On CI, missing Docker fails the spec instead of canceling it
-  val onCi: Boolean                       = sys.env.contains("CI")
-  lazy val container: PostgreSQLContainer = new PostgreSQLContainer("postgres:16-alpine")
+  val selected: Boolean                   = TestDatabase.PostgreSql.selected
+  lazy val container: PostgreSQLContainer = new PostgreSQLContainer("postgres:16.15-alpine")
   lazy val db: Database =
     Database.forURL(
       container.getJdbcUrl,
@@ -111,7 +110,7 @@ class PostgreSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
 
   def await[T](f: Future[T]): T = Await.result(f, 30.seconds)
 
-  override def beforeAll(): Unit = if (dockerAvailable) {
+  override def beforeAll(): Unit = if (selected) {
     container.start()
     try setUp()
     catch {
@@ -147,7 +146,7 @@ class PostgreSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
       )
     )
 
-  override def afterAll(): Unit = if (dockerAvailable) {
+  override def afterAll(): Unit = if (selected) {
     db.close()
     simpleDb.close()
     container.stop()
@@ -192,9 +191,6 @@ class PostgreSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
     go(None, Vector.empty)
   }
 
-  def requireDocker(): Unit =
-    if (onCi) assert(dockerAvailable, "Docker is not available") else assume(dockerAvailable, "Docker is not available")
-
   class Big(t: Tag) extends Table[(Int, String, Option[String])](t, "pg_big") {
     def id   = column[Int]("id", O.PrimaryKey)
     def name = column[String]("name")
@@ -216,10 +212,9 @@ class PostgreSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
     await(simpleDb.run(sql"EXPLAIN (GENERIC_PLAN) #$numbered".as[String])).mkString("\n")
   }
 
-  "Seekers on PostgreSQL" should {
+  if (selected) "Seekers on PostgreSQL" should {
     configs.foreach { case (name, config) =>
       s"return every row once in order, the same pages ad-hoc and compiled, with and without row comparisons: $name" in {
-        requireDocker()
         val all = adHoc(config, MyPgProfile)(1000, None).items
         all should have size 31
 
@@ -251,7 +246,6 @@ class PostgreSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
     }
 
     "serve pages from indexes: default nulls and row value comparisons keep the index order" in {
-      requireDocker()
       val defaultNulls = secondPagePlan(big.toSeeker.seek(_.tag.desc).seek(_.id.desc))
       withClue(defaultNulls) {
         defaultNulls should include("Index Scan Backward using pg_big_tag_id")
@@ -267,7 +261,6 @@ class PostgreSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
     }
 
     "fail on enums for compiled pages that bind strings as varchar (what untyped string parameters fix)" in {
-      requireDocker()
       val config: Config = _.toSeeker.seek(_.level.asc).seek(_.id.asc)
       val page           = compiled(config, TypedParamsPgProfile)
       val error          = the[Exception] thrownBy page(2, page(2, None).nextCursor)
