@@ -56,8 +56,8 @@ LIMIT 20
 Cursor values are bound as parameters of the column's type, so they compare exactly like the column's own values
 (a `REAL` column's `0.1f` equals its cursor value, which the literal `0.1` would not). Cursor value codecs should
 therefore decode the column's type; values of another type are written as literals, as in earlier versions.
-Floating-point seek columns stay fragile where the driver sends parameters as text (MariaDB Connector/J by default,
-see [Supported Databases](#supported-databases)); prefer `DECIMAL` columns or another seek column there.
+Floating-point seek columns stay fragile where the driver sends parameters as text (MySQL's and MariaDB's drivers by
+default, see below and [Supported Databases](#supported-databases)); prefer `DECIMAL` columns where you can.
 
 - On SQL Server, a cursor value only compares like its column sorts if it has the column's type, and the driver
   binds strings as `nvarchar` and timestamps as `datetime2`. Seekers therefore cast cursor values of string
@@ -69,6 +69,17 @@ see [Supported Databases](#supported-databases)); prefer `DECIMAL` columns or an
   an expression over columns of different declared types, or of a column of a query the seeker can't follow to its
   table, are not cast: they compare as the driver binds them (`nvarchar`, `datetime2`).
   Override `seekerCursorValueCast` in your profile to change the casts.
+- On SQL Server, cursor columns are selected as expressions, and so are columns the items select more than once
+  (`pageAs(t => (t.id, t.id))`): SQL Server resolves `order by "id"` against the selected columns and fails with
+  "Ambiguous column name" if one is selected twice.
+
+- On MySQL and MariaDB, the drivers send `Float` parameters as text by default, and `0.1` as a `DOUBLE` never equals
+  a single-precision `FLOAT` column's `0.1f`; they also send `FLOAT` values as text with 6 significant digits.
+  Seekers therefore cast cursor values of `FLOAT` columns (declared with `O.SqlType("FLOAT")`, or `FLOAT(p)` up to
+  `p` = 24) to `FLOAT` and select the column as `DOUBLE` for the cursor, which needs MySQL 8.0.17+ or MariaDB
+  10.4.5+. Slick's DDL declares `Float` as `REAL`, which is `DOUBLE` there: not cast (see the MariaDB limitation in
+  [Supported Databases](#supported-databases)). On MySQL, `seekerCursorValueCast` types are written as
+  `CAST(? AS type)`, so they must be types MySQL's `CAST` takes.
 
 - On PostgreSQL, string-backed cursor values (`String` and types mapped to `String`) are bound untyped, as literals
   would be, so they compare with native enums, `uuid` and other columns mapped to `String`. Override
@@ -256,8 +267,8 @@ return each row exactly once in the database's own order.
 | HSQLDB | 2.7 | `HsqldbProfile` | |
 | SQLite | 3.53 | `SQLiteProfile` | |
 | Derby | 10.17 | `DerbyProfile` | |
-| MySQL | 8.4 (Connector/J 9) | `MySQLProfile` | |
-| MariaDB | 11.4 (MariaDB Connector/J 3.5) | `MySQLProfile` | See floating-point columns below |
+| MySQL | 8.4 (Connector/J 9) | `MySQLProfile` | `FLOAT` [casts](#cursor-values-as-parameters) (8.0.17+) |
+| MariaDB | 11.4 (MariaDB Connector/J 3.5) | `MySQLProfile` | `FLOAT` [casts](#cursor-values-as-parameters) (10.4.5+); see `REAL` columns below |
 | SQL Server | 2022 (mssql-jdbc 13) | `SQLServerProfile` | Declare `O.SqlType` where it differs from Slick's ([casts](#cursor-values-as-parameters)) |
 | Oracle | 23 (Free) | `OracleProfile` | |
 | CockroachDB | 25.4 | `PostgresProfile` | Needs the [nulls override](#null-handling) |
@@ -268,9 +279,12 @@ return each row exactly once in the database's own order.
 
 Known limitations:
 
-- **MariaDB, floating-point seek columns**: MariaDB Connector/J sends parameters as text by default, so a cursor
-  value `0.1` never equals the `REAL` value `0.1f` it came from and pages repeat. Connect with
-  `useServerPrepStmts=true`, or seek on `DECIMAL` columns. MySQL with Connector/J pages them correctly.
+- **MariaDB, `Float` in `REAL` / `DOUBLE` columns** (Slick's default DDL for `Float`): MariaDB Connector/J's batch
+  inserts store `0.1f` as `0.10000000149…`, its single inserts and text parameters as `0.1`, so the same column can
+  hold both and the `Float` cursor value can't tell which one its row has: pages repeat. No cast fixes both.
+  Declare such columns `FLOAT` (`O.SqlType("FLOAT")`, [cast](#cursor-values-as-parameters)) or `DECIMAL`, map them to
+  `Double`, or connect with `useServerPrepStmts=true` (binary parameters, as batches send them). MySQL's
+  Connector/J sends them as text everywhere, so they page correctly there.
 - **SQL Server, `sendStringParametersAsUnicode=false`**: `varchar` and `datetime` columns still page correctly, but
   `nvarchar` values outside the database's code page are lost before any cast: keep the default (`true`). The same
   goes for a `varchar` column whose collation has another code page than the database default.
