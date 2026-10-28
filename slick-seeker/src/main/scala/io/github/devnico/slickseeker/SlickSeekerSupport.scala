@@ -38,8 +38,8 @@ import slick.lifted
   *   with SlickSeekerSupport
   *   with PlayJsonSeekerSupport {
   *
-  *   object MyAPI extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
-  *   override val api: MyAPI = MyAPI
+  *   object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
+  *   override val api: MyApi.type = MyApi
   * }
   *
   * object MyPostgresProfile extends MyPostgresProfile

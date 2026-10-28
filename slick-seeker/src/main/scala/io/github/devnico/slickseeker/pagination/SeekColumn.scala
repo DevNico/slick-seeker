@@ -34,12 +34,9 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
           if (current.ord.nulls == Ordering.NullsDefault && self.nonNull) Ordering.NullsDefault
           else if (current.ord.nulls != Ordering.NullsDefault) {
             // Reversing the direction mirrors the nulls; keeping it keeps them
-            (current.ord.nulls, current.ord.direction == newDir) match {
-              case (nulls, true)              => nulls
-              case (Ordering.NullsFirst, _)   => Ordering.NullsLast
-              case (Ordering.NullsLast, _)    => Ordering.NullsFirst
-              case (Ordering.NullsDefault, _) => Ordering.NullsDefault
-            }
+            if (current.ord.direction == newDir) current.ord.nulls
+            else if (current.ord.nulls == Ordering.NullsFirst) Ordering.NullsLast
+            else Ordering.NullsFirst
           } else {
             if (direction == io.github.devnico.slickseeker.support.SortDirection.Asc) Ordering.NullsLast
             else Ordering.NullsFirst
