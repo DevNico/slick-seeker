@@ -16,8 +16,11 @@ trait ColumnSeekFilter[T] {
     * cursor pages as ad-hoc pages.
     */
   def applyParam(column: ColumnOrdered[T], value: Rep[T], valueIsNull: Boolean, prevCond: FilterCond): FilterCond =
-    throw new UnsupportedOperationException(s"${getClass.getName} does not support compiled pages (no applyParam)")
+    throw new NoCompiledPages(s"${getClass.getName} does not support compiled pages (no applyParam)")
 }
+
+/** Thrown by the default `applyParam` and `typedType`: compiled pages then run their cursor pages as ad-hoc pages. */
+final private[slickseeker] class NoCompiledPages(message: String) extends UnsupportedOperationException(message)
 
 /** A built-in filter: seekers bind its cursor values as parameters of `valueType` and call [[applyParam]]. */
 private[slickseeker] trait BuiltInSeekFilter[T] extends ColumnSeekFilter[T] {

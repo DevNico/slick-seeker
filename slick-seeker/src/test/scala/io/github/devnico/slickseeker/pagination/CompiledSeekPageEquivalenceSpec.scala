@@ -235,6 +235,14 @@ class CompiledSeekPageEquivalenceSpec extends AnyWordSpec with Matchers with Bef
       await(db.run(page.pageWithoutCount(2, 3, pages.last.prevCursor))) shouldBe
         await(db.run(seeker(2).pageWithoutCountAs(3, pages.last.prevCursor)(_.id)))
       await(db.run(page.page(2, 3, None))).total shouldBe data.count(_.id >= 2)
+
+      // Cursors whose values don't decode or don't fit the columns give the first page, as with bound cursor values
+      val env = implicitly[CursorEnvironment[String]]
+      Seq(Seq("St1"), Seq("X", "5"), Seq.empty).foreach { values =>
+        Seq(CursorDirection.Forward, CursorDirection.Backward).foreach { direction =>
+          await(db.run(page.pageWithoutCount(2, 3, Some(env.encode(values, direction))))) shouldBe pages.head
+        }
+      }
     }
 
     "reject a seeker without seek columns" in {

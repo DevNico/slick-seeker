@@ -133,6 +133,11 @@ class SeekSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
 
       val compiled = CompiledSeekPage[Unit]((_: Unit) => items.toSeeker.seek(_.name.asc).seek(_.id.asc)(byId))(_.id)
       await(db.run(compiled.pageWithoutCount((), 4, first.nextCursor))) shouldBe page(first.nextCursor)
+      // Such pages run as ad-hoc pages, with the application parameters still bound
+      val fromId = CompiledSeekPage[Int]((min: ConstColumn[Int]) =>
+        items.filter(_.id >= min).toSeeker.seek(_.name.asc).seek(_.id.asc)(byId)
+      )(_.id)
+      lastSql(await(db.run(fromId.pageWithoutCount(2, 4, first.nextCursor)))) should include(""""id" >= ?""")
     }
 
     "use row comparisons in compiled pages" in {
