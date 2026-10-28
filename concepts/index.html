@@ -1147,9 +1147,9 @@ limit as parameters of queries compiled once instead:</p>
   including row value comparisons. A cursor that can't be decoded at all fails like it does for the ad-hoc seeker;
   one whose values don't decode or don't fit the cursor columns gives the first page (the ad-hoc seeker then pages
   without a cursor filter, or with one on the leading columns if there are fewer values than columns).</li>
-<li>Cursor value codecs must decode values of the column's type (checked per page). Custom <code>SeekerSortKey</code>s and
-  <code>ColumnSeekFilter</code>s need <code>typedType</code> and <code>applyParam</code> (the built-in ones have them); a missing one fails when the
-  <code>CompiledSeekPage</code> is created.</li>
+<li>Cursor pages bind cursor values as parameters. Where they can't, they run as ad-hoc pages (same items and cursors,
+  compiled per page): for custom <code>SeekerSortKey</code>s without <code>typedType</code> or <code>ColumnSeekFilter</code>s without <code>applyParam</code>,
+  and for cursor values a codec decoded as another type than the column's.</li>
 <li>Generic plans: see <a href="#cursor-values-as-parameters">Cursor Values as Parameters</a>.</li>
 <li>The seeker needs at least one seek column.</li>
 <li><code>SlickPgTupleSeeker</code> is not supported; <code>toSeeker</code> seekers use the same row value comparisons where they qualify.</li>
