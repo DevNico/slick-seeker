@@ -74,6 +74,19 @@ class SqlRenderingSpec extends AnyWordSpec with Matchers {
       }
     }
 
+    "keep explicit nulls with seekDirection unless it reverses the direction" in {
+      def order(seeker: SlickSeeker[Items, (Int, String, Option[String]), String, ?, ?]) = {
+        val s = sql(seeker, PostgresProfile, Seq("St1", "5"))
+        s.substring(s.toLowerCase.indexOf("order by"))
+      }
+      val descFirst = items.toSeeker.seek(_.tag.desc.nullsFirst).seek(_.id.asc)
+      order(descFirst.seekDirection(SortDirection.Desc)) should include(""""tag" desc nulls first""")
+      order(descFirst.seekDirection(SortDirection.Asc)) should include(""""tag" nulls last""")
+      val ascFirst = items.toSeeker.seek(_.tag.asc.nullsFirst).seek(_.id.asc)
+      order(ascFirst.seekDirection(SortDirection.Asc)) should include(""""tag" nulls first""")
+      order(ascFirst.seekDirection(SortDirection.Desc)) should include(""""tag" desc nulls last""")
+    }
+
     "write the database's default nulls placement out for Option columns" in {
       def order(profile: JdbcProfile, seeker: SlickSeeker[Items, (Int, String, Option[String]), String, ?, ?]) = {
         val s = sql(seeker, profile, Seq("St1", "5"))

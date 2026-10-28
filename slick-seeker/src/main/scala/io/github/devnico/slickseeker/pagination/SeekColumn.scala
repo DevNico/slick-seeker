@@ -33,11 +33,12 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         val finalNulls =
           if (current.ord.nulls == Ordering.NullsDefault && self.nonNull) Ordering.NullsDefault
           else if (current.ord.nulls != Ordering.NullsDefault) {
-            (current.ord.nulls, direction) match {
-              case (Ordering.NullsFirst, io.github.devnico.slickseeker.support.SortDirection.Desc) => Ordering.NullsLast
-              case (Ordering.NullsLast, io.github.devnico.slickseeker.support.SortDirection.Desc)  => Ordering.NullsFirst
-              case (nulls, io.github.devnico.slickseeker.support.SortDirection.Asc)                => nulls
-              case (nulls, _)                                                                      => nulls
+            // Reversing the direction mirrors the nulls; keeping it keeps them
+            (current.ord.nulls, current.ord.direction == newDir) match {
+              case (nulls, true)              => nulls
+              case (Ordering.NullsFirst, _)   => Ordering.NullsLast
+              case (Ordering.NullsLast, _)    => Ordering.NullsFirst
+              case (Ordering.NullsDefault, _) => Ordering.NullsDefault
             }
           } else {
             if (direction == io.github.devnico.slickseeker.support.SortDirection.Asc) Ordering.NullsLast

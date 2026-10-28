@@ -143,7 +143,9 @@ trait MyProfile extends H2Profile with SlickSeekerSupport {
 }
 ```
 
-`seekDirection` sets its own null ordering with the direction, as in earlier versions (not the database's default):
+`seekDirection` keeps explicit null orderings when a column already sorts in that direction and mirrors them when it
+reverses it (`.desc.nullsFirst` becomes `.asc.nullsLast`). Without one, it sets its own null ordering, as in earlier
+versions (not the database's default):
 
 ```scala
 // ASC: nulls last
