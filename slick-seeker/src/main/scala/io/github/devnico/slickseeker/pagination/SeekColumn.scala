@@ -31,7 +31,7 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         val newDir =
           if (direction == io.github.devnico.slickseeker.support.SortDirection.Asc) Ordering.Asc else Ordering.Desc
         val finalNulls =
-          if (current.ord.nulls == Ordering.NullsDefault && self.nonNull) Ordering.NullsDefault
+          if (current.ord.nulls == Ordering.NullsDefault && !self.nullable(current)) Ordering.NullsDefault
           else if (current.ord.nulls != Ordering.NullsDefault) {
             // Reversing the direction mirrors the nulls; keeping it keeps them
             if (current.ord.direction == newDir) current.ord.nulls
@@ -58,13 +58,13 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         val newCol      = originalCol.reverse
 
         (originalCol.ord.direction, originalCol.ord.nulls) match {
-          case (_, Ordering.NullsDefault) if self.nonNull => newCol
-          case (Ordering.Asc, Ordering.NullsFirst)        => newCol.nullsLast
-          case (Ordering.Asc, Ordering.NullsLast)         => newCol.nullsFirst
-          case (Ordering.Asc, Ordering.NullsDefault)      => newCol.nullsFirst
-          case (Ordering.Desc, Ordering.NullsFirst)       => newCol.nullsLast
-          case (Ordering.Desc, Ordering.NullsLast)        => newCol.nullsFirst
-          case (Ordering.Desc, Ordering.NullsDefault)     => newCol.nullsLast
+          case (_, Ordering.NullsDefault) if !self.nullable(originalCol) => newCol
+          case (Ordering.Asc, Ordering.NullsFirst)                       => newCol.nullsLast
+          case (Ordering.Asc, Ordering.NullsLast)                        => newCol.nullsFirst
+          case (Ordering.Asc, Ordering.NullsDefault)                     => newCol.nullsFirst
+          case (Ordering.Desc, Ordering.NullsFirst)                      => newCol.nullsLast
+          case (Ordering.Desc, Ordering.NullsLast)                       => newCol.nullsFirst
+          case (Ordering.Desc, Ordering.NullsDefault)                    => newCol.nullsLast
         }
       }
       val filter    = self.filter
@@ -113,13 +113,13 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
   def withDefaultNulls(settings: SeekSettings): SeekColumn[E, U, CVE] = filter match {
     case _: RowComparableSeekFilter[?] => this
     case other =>
-      val self     = this
-      val nullable = other.isInstanceOf[NullableSeekFilter[?]]
+      val self          = this
+      val builtInOption = other.isInstanceOf[NullableSeekFilter[?]]
       new SeekColumn[E, U, CVE] {
         type Column = self.Column
         val col: E => ColumnOrdered[Column] = { table =>
           val ordered = self.col(table)
-          if (ordered.ord.nulls != Ordering.NullsDefault || !(nullable || isOption(ordered))) ordered
+          if (ordered.ord.nulls != Ordering.NullsDefault || !(builtInOption || self.isOption(ordered))) ordered
           else ordered.copy(ord = ordered.ord.copy(nulls = settings.defaultNulls(ordered.ord.direction)))
         }
         val filter    = self.filter
@@ -128,8 +128,17 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
       }
   }
 
-  private def isOption(ordered: ColumnOrdered[?]): Boolean =
-    scala.util.Try(ordered.column.toNode.nodeType.isInstanceOf[OptionType]).getOrElse(false)
+  /** Whether this column can be null: an `Option` column, unless its filter is the built-in non-null one. */
+  def nullable(ordered: ColumnOrdered[?]): Boolean = !nonNull && isOption(ordered)
+
+  /** Whether `ordered` sorts an `Option` column or expression: after its sort key's type, else its own. */
+  def isOption(ordered: ColumnOrdered[?]): Boolean = {
+    val tpe = scala.util.Try(typedType()).toOption.orElse(ordered.column match {
+      case typed: Rep.TypedRep[?] => Some(typed.tpe)
+      case other                  => scala.util.Try(other.toNode.nodeType).toOption
+    })
+    tpe.exists(_.isInstanceOf[OptionType])
+  }
 
   /** Whether this column can be part of a row value comparison (see [[RowComparableSeekFilter]]). */
   def rowComparable: Boolean = filter.isInstanceOf[RowComparableSeekFilter[?]]

@@ -211,8 +211,9 @@ val seeker = persons.toSeeker
 every seek column is non-null and they all sort in the same direction. Nothing to choose; see
 [Row Value Comparisons](concepts.md#row-value-comparisons).
 
-`toPgTupleSeekerAsc` / `toPgTupleSeekerDesc` are deprecated since 0.7.2 and will be removed before 1.0. They generate
-the same SQL; replace them with `toSeeker` and give each column its direction:
+`toPgTupleSeekerAsc` / `toPgTupleSeekerDesc` are deprecated since 0.7.2 and will be removed before 1.0. On PostgreSQL
+`toSeeker` generates the same row value comparison, with cursor values bound as parameters instead of literals;
+replace them with `toSeeker` and give each column its direction:
 
 ```scala
 // Before
@@ -221,6 +222,11 @@ val seeker = users.toPgTupleSeekerAsc.seek(_.name).seek(_.id)
 // After
 val seeker = users.toSeeker.seek(_.name.asc).seek(_.id.asc)
 ```
+
+The tuple seeker sorts every column by its own value. If a `SeekOrder` is in scope for a column's type, `toSeeker`
+sorts that column by the `SeekOrder` instead, a different order with different cursors: keep the column's own order
+with `.seek(_.status.asc)(seekerSortKeyIdentity)`, or bring the `SeekOrder` out of scope. Cursors of the tuple seeker
+can't be reused across the switch either way.
 
 ## Custom Cursor Environments
 

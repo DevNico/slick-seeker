@@ -125,10 +125,14 @@ that ordering out explicitly so its cursor conditions match it:
 | H2, MySQL, SQLite, SQL Server | nulls first | nulls last |
 | HSQLDB | nulls first | nulls first |
 
+Custom `ColumnSeekFilter`s on `Option` columns and expressions get this ordering too, so they always see an explicit
+`NullsFirst` / `NullsLast` there; on non-null columns they keep `NullsDefault`, also on backward pages.
+
 This keeps the order (and the indexes serving it) the database uses anyway. If your database or its configuration
 sorts nulls differently, override `seekerDefaultNulls` in your profile: e.g. H2 with `DEFAULT_NULL_ORDERING`, or
 PostgreSQL-compatible databases with other defaults that use `PostgresProfile` (CockroachDB sorts nulls first
-ascending, like H2). A wrong placement still pages every row exactly once, but puts null rows elsewhere than the
+ascending, like H2). A wrong placement still pages every row exactly once (with custom filters, if they follow the
+nulls ordering they get), but puts null rows elsewhere than the
 database would and can't use an index for the order:
 
 ```scala

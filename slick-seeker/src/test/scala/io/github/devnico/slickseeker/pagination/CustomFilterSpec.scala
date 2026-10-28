@@ -85,7 +85,17 @@ class CustomFilterSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll 
         Query[Items, (Int, Option[String]), Seq]
     )](
       ("tag asc", _.toSeeker.seek(_.tag.asc)(custom).seek(_.id.asc), items.sortBy(r => (r.tag.asc, r.id.asc))),
-      ("tag desc", _.toSeeker.seek(_.tag.desc)(custom).seek(_.id.asc), items.sortBy(r => (r.tag.desc, r.id.asc)))
+      ("tag desc", _.toSeeker.seek(_.tag.desc)(custom).seek(_.id.asc), items.sortBy(r => (r.tag.desc, r.id.asc))),
+      (
+        "upper(tag) asc",
+        _.toSeeker.seek(_.tag.toUpperCase.asc)(custom).seek(_.id.asc),
+        items.sortBy(r => (r.tag.toUpperCase.asc, r.id.asc))
+      ),
+      (
+        "case tag desc",
+        _.toSeeker.seek(r => Case.If(r.id > 0).Then(r.tag).Else(Option.empty[String]).desc)(custom).seek(_.id.asc),
+        items.sortBy(r => (r.tag.desc, r.id.asc))
+      )
     ).foreach { case (name, seeker, native) =>
       s"page every row once in the database's order, forward and backward: $name" in {
         val expected            = await(db.run(native.map(_.id).result)).toVector
@@ -94,6 +104,39 @@ class CustomFilterSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll 
         backward shouldBe expected
         val compiled = CompiledSeekPage[Unit]((_: Unit) => seeker(items))(_.id)
         walk(c => await(db.run(compiled.pageWithoutCount((), 3, c)))) shouldBe ((expected, expected))
+      }
+    }
+
+    "page a column of a mapped query in the database's order, forward and backward" in {
+      val seeker   = items.map(r => (r.id, r.tag)).toSeeker.seek(_._2.asc)(custom).seek(_._1.asc)
+      val expected = await(db.run(items.sortBy(r => (r.tag.asc, r.id.asc)).map(_.id).result)).toVector
+      walk(c => await(db.run(seeker.pageWithoutCountAs(3, c)(_._1)))) shouldBe ((expected, expected))
+    }
+  }
+
+  "Custom filters on non-null columns" should {
+    "get no nulls clause on backward pages, which MySQL, SQLite and SQL Server would emulate" in {
+      val builtInId = MyH2Profile.api.seekerSortKeyIdentity[Int, String]
+      val customId: SeekerSortKey[Int, Int, String] = new SeekerSortKey[Int, Int, String] {
+        def mapCol(col: slick.lifted.ColumnOrdered[Int]) = builtInId.mapCol(col)
+        def shape                                        = builtInId.shape
+        def codec: CursorValueCodec[Int, String]         = builtInId.codec
+        def filter: ColumnSeekFilter[Int] = new ColumnSeekFilter[Int] {
+          def apply(column: slick.lifted.ColumnOrdered[Int], value: Int, prevCond: ColumnSeekFilterTypes.FilterCond) =
+            builtInId.filter(column, value, prevCond)
+        }
+      }
+      val env     = implicitly[CursorEnvironment[String]]
+      val decoded = env.decodeWithDirectionOrThrow(Some(env.encode(Seq("5"), CursorDirection.Backward)))
+      Seq(slick.jdbc.MySQLProfile, slick.jdbc.SQLiteProfile, slick.jdbc.SQLServerProfile).foreach { profile =>
+        Seq(
+          items.toSeeker.seek(_.id.asc)(customId),
+          items.toSeeker.seek(_.id)(customId).seekDirection(io.github.devnico.slickseeker.support.SortDirection.Desc)
+        ).foreach { seeker =>
+          val query = seeker.pageQuery(decoded, 2, SeekSettings.of(profile))
+          val sql   = profile.api.streamableQueryActionExtensionMethods(query).result.statements.head.toLowerCase
+          sql should not include "null"
+        }
       }
     }
   }
