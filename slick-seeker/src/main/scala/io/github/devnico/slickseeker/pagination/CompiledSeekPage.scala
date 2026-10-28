@@ -50,6 +50,8 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     selectShape: Shape[FlatShapeLevel, P, PU, P],
     profile: JdbcProfile
 ) {
+  // The cursor's types (C, CU) grow with every `seek` and can't be named here, so they are erased to `Any`. The casts
+  // below are safe because cursor shapes, parameters and decoded values all come from the same seeker structure.
   private type Rows      = Seq[(PU, Any)]
   private type PageQuery = Query[(P, Any), (PU, Any), Seq]
 

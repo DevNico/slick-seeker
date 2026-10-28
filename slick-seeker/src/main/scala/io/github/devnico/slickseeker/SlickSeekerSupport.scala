@@ -57,11 +57,9 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
 
     implicit def seekFilterT[T](implicit btt: BaseTypedType[T]): ColumnSeekFilter[T] =
       new ColumnSeekFilter[T] {
+        // The ad-hoc seeker's literal goes through the same conditions as a compiled page's bound parameter.
         def apply(ordered: lifted.ColumnOrdered[T], value: T, prevCond: FilterCond): FilterCond =
-          ordered.ord.direction match {
-            case Ordering.Asc  => ordered.column > value || (ordered.column === value && prevCond)
-            case Ordering.Desc => ordered.column < value || (ordered.column === value && prevCond)
-          }
+          applyParam(ordered, lifted.LiteralColumn(value), valueIsNull = false, prevCond)
 
         override def applyParam(
             ordered: lifted.ColumnOrdered[T],
@@ -77,35 +75,8 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
 
     implicit def seekFilterOptT[T](implicit btt: BaseTypedType[T]): ColumnSeekFilter[Option[T]] =
       new ColumnSeekFilter[Option[T]] {
-        def apply(
-            ordered: lifted.ColumnOrdered[Option[T]],
-            value: Option[T],
-            prevCond: FilterCond
-        ): FilterCond = {
-          val col = ordered.column
-          (ordered.ord.direction, ordered.ord.nulls, value) match {
-            case (Ordering.Asc, Ordering.NullsFirst, Some(v)) =>
-              (col > v) || (col === v && prevCond)
-            case (Ordering.Desc, Ordering.NullsFirst, Some(v)) =>
-              (col < v) || (col === v && prevCond)
-            case (_, Ordering.NullsFirst, None) =>
-              (col.isEmpty && prevCond) || col.isDefined
-
-            case (Ordering.Asc, Ordering.NullsLast, Some(v)) =>
-              (col > v) || (col === v && prevCond) || col.isEmpty
-            case (Ordering.Desc, Ordering.NullsLast, Some(v)) =>
-              (col < v) || (col === v && prevCond) || col.isEmpty
-            case (_, Ordering.NullsLast, None) =>
-              col.isEmpty && prevCond
-
-            case (Ordering.Asc, Ordering.NullsDefault, Some(v)) =>
-              (col > v) || (col === v && prevCond) || col.isEmpty
-            case (Ordering.Desc, Ordering.NullsDefault, Some(v)) =>
-              (col < v) || (col === v && prevCond) || col.isEmpty
-            case (_, Ordering.NullsDefault, None) =>
-              col.isEmpty && prevCond
-          }
-        }
+        def apply(ordered: lifted.ColumnOrdered[Option[T]], value: Option[T], prevCond: FilterCond): FilterCond =
+          applyParam(ordered, lifted.LiteralColumn(value)(btt.optionType), value.isEmpty, prevCond)
 
         override def applyParam(
             ordered: lifted.ColumnOrdered[Option[T]],

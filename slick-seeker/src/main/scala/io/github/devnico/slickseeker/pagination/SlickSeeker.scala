@@ -214,9 +214,10 @@ object SlickSeeker {
   import ColumnSeekFilterTypes._
 
   // Cursor parameters nest as (last column, (…, (first column, seed))); the seed is not a cursor column.
-  private def flattenParams(params: Any): List[lifted.Rep[?]] = params match {
-    case (head: lifted.Rep[?], tail) => flattenParams(tail) :+ head
-    case _                           => Nil
+  @scala.annotation.tailrec
+  private def flattenParams(params: Any, acc: List[lifted.Rep[?]] = Nil): List[lifted.Rep[?]] = params match {
+    case (head: lifted.Rep[?], tail) => flattenParams(tail, head :: acc)
+    case _                           => acc
   }
 
   private def alwaysTrue: FilterCond = {

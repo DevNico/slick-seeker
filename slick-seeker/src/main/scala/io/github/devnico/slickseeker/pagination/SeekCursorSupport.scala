@@ -59,9 +59,10 @@ final private[slickseeker] case class SeekCursorSupport[E, U, CVE, C, CU](
       }
 
   /** Which cursor values of [[decodeParams]] are `None`, first column first. */
-  def nullFlags(params: Any): List[Boolean] = params match {
-    case (value, tail) => nullFlags(tail) :+ (value == None)
-    case _             => Nil
+  @scala.annotation.tailrec
+  def nullFlags(params: Any, acc: List[Boolean] = Nil): List[Boolean] = params match {
+    case (value, tail) => nullFlags(tail, (value == None) :: acc)
+    case _             => acc
   }
 
   /** Cursor columns of an `Option` type: each has forms for `None` cursor values. */
