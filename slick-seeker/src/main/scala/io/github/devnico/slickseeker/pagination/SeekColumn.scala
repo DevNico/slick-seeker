@@ -8,7 +8,7 @@ import io.github.devnico.slickseeker.filter.{
   NullableSeekFilter,
   RowComparableSeekFilter
 }
-import slick.ast.{Node, Ordering, TypedType}
+import slick.ast.{Node, OptionType, Ordering, TypedType}
 import slick.lifted.{ColumnOrdered, Rep}
 
 private[slickseeker] trait SeekColumn[E, U, CVE] {
@@ -106,25 +106,30 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
       tpe.asInstanceOf[TypedType[Column]]
     )
 
-  /** This column with a missing nulls ordering resolved to the database's default where its filter needs one (see
-    * [[NullableSeekFilter]]); applied before [[reversed]], which mirrors it.
+  /** This column with a missing nulls ordering resolved to the database's default where its filter needs one: the
+    * built-in filter of `Option` columns (see [[NullableSeekFilter]]) and custom filters of `Option` columns, which
+    * can't tell where the database puts nulls otherwise. Applied before [[reversed]], which mirrors it.
     */
   def withDefaultNulls(settings: SeekSettings): SeekColumn[E, U, CVE] = filter match {
-    case _: NullableSeekFilter[?] =>
-      val self = this
+    case _: RowComparableSeekFilter[?] => this
+    case other =>
+      val self     = this
+      val nullable = other.isInstanceOf[NullableSeekFilter[?]]
       new SeekColumn[E, U, CVE] {
         type Column = self.Column
         val col: E => ColumnOrdered[Column] = { table =>
           val ordered = self.col(table)
-          if (ordered.ord.nulls != Ordering.NullsDefault) ordered
+          if (ordered.ord.nulls != Ordering.NullsDefault || !(nullable || isOption(ordered))) ordered
           else ordered.copy(ord = ordered.ord.copy(nulls = settings.defaultNulls(ordered.ord.direction)))
         }
         val filter    = self.filter
         val codec     = self.codec
         val typedType = self.typedType
       }
-    case _ => this
   }
+
+  private def isOption(ordered: ColumnOrdered[?]): Boolean =
+    scala.util.Try(ordered.column.toNode.nodeType.isInstanceOf[OptionType]).getOrElse(false)
 
   /** Whether this column can be part of a row value comparison (see [[RowComparableSeekFilter]]). */
   def rowComparable: Boolean = filter.isInstanceOf[RowComparableSeekFilter[?]]
