@@ -83,6 +83,22 @@ val seeker = ordersWithUsers.toSeeker
   }
 ```
 
+### Paging a Selection
+
+Joins needed only for sorting or searching don't have to be selected. `pageAs` / `pageWithoutCountAs` page a
+selection of the element while filtering, sorting and the cursor still use the whole element, e.g. to page ids and load
+the rows of a page separately. Cursors are the same as those of `page` / `pageWithoutCount`.
+
+```scala
+val seeker = ordersWithUsers.toSeeker
+  .seek(t => t._2.asc)      // sort by user name (joined)
+  .seek(t => t._1.id.asc)   // tiebreaker
+
+// Selects only the order ids; sorting and cursors still use the joined user name
+val idPage: DBIO[PaginatedResultWithoutCount[Int]] =
+  seeker.pageWithoutCountAs(limit = 20, cursor = None)(t => t._1.id)
+```
+
 ## Aggregated Results
 
 ```scala

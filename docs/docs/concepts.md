@@ -177,6 +177,44 @@ val withoutCount: PaginatedResultWithoutCount[User] = result.withoutCount
 val withCount: PaginatedResult[User] = withoutCountResult.withCount(total)
 ```
 
+## Compiled Pages
+
+Slick compiles every query to SQL before running it, which can cost more CPU than the database spends on it,
+especially for joined queries. A seeker builds a new query for every page (the cursor values and the limit are
+literals), so its pages cannot be precompiled with `Compiled`. `CompiledSeekPage` binds them as parameters instead:
+
+```scala
+// Created once (e.g. a val), reused for every request
+val byMinAge = CompiledSeekPage[Int]((minAge: ConstColumn[Int]) =>
+  persons.filter(_.age >= minAge).toSeeker
+    .seek(_.lastName.desc.nullsLast)
+    .seek(_.id.asc)
+)(p => p.id)
+
+byMinAge.pageWithoutCount(params = 30, limit = 20, cursor = None)   // or .page(…) with a total count
+```
+
+- The application parameters (`AU`, here `Int`) are passed per call; `build` receives them as `Rep`s. The query may
+  only depend on these parameters: everything else (constants, table and schema names, Scala-side branches) is
+  compiled in. Optional filters need either one `CompiledSeekPage` per combination or SQL-side handling
+  (`p.isEmpty || …`).
+- Each form of the page query is compiled once: the first page and, for forward and backward pages, one per
+  combination of `None` values in nullable cursor columns (`maxForms` = 1 + 2 × 2^nullable columns).
+- Items and cursors are the same as those of `pageWithoutCountAs` / `pageAs` for every cursor the seeker produced.
+  Cursors whose values don't decode or don't fit the cursor columns give the first page.
+- Cursor value codecs must decode values of their real type (bound parameters, unlike literals, are not rendered
+  via `toString`). Custom `SeekerSortKey`s and `ColumnSeekFilter`s need `typedType` and `applyParam` (the built-in ones
+  have them); a missing one fails when the `CompiledSeekPage` is created.
+- Cursor values are bound with the sort column's JDBC type, while the ad-hoc seeker writes untyped literals. A
+  PostgreSQL enum mapped with `MappedColumnType.base[E, String]` is bound as `varchar`, and `enum_col > varchar` does not
+  exist: map such enums to a type that binds as `Types.OTHER` (e.g. slick-pg's enum support) or set
+  `stringtype=unspecified` in the JDBC URL.
+- With bound parameters, the database may reuse a generic plan (PostgreSQL after five executions of a server-side
+  prepared statement). Check the plans of hot page queries; `plan_cache_mode = force_custom_plan` restores per-value
+  planning while keeping the saved compilation.
+- The seeker needs at least one seek column.
+- `SlickPgTupleSeeker` is not supported.
+
 ## Bidirectional Pagination
 
 Slick Seeker supports both forward and backward navigation with both `page()` and `pageWithoutCount()`:

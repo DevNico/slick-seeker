@@ -399,4 +399,45 @@ class SlickSeekerIntegrationSpec extends AnyWordSpec with Matchers with BeforeAn
     }
   }
 
+  "SlickSeeker projected pages" should {
+
+    "page a selection while sorting and seeking on the whole element" in {
+      val seeker = persons.toSeeker
+        .seek(_.firstName.asc)
+        .seek(_.id.asc)
+
+      val page1 = await(db.run(seeker.pageWithoutCountAs(limit = 3, cursor = None)(_.id)))
+      val page2 = await(db.run(seeker.pageWithoutCountAs(limit = 3, cursor = page1.nextCursor)(_.id)))
+      val back  = await(db.run(seeker.pageWithoutCountAs(limit = 3, cursor = page2.prevCursor)(_.id)))
+
+      page1.items shouldBe Seq(1, 2, 3)
+      page2.items shouldBe Seq(4, 5, 6)
+      back.items shouldBe page1.items
+      back.prevCursor shouldBe None
+    }
+
+    "use the same cursors as whole-element pages" in {
+      val seeker = persons.toSeeker
+        .seek(_.lastName.desc.nullsLast)
+        .seek(_.id.asc)
+
+      val whole     = await(db.run(seeker.pageWithoutCount(limit = 4, cursor = None)))
+      val projected = await(db.run(seeker.pageWithoutCountAs(limit = 4, cursor = None)(p => (p.id, p.lastName))))
+      val nextWhole = await(db.run(seeker.pageWithoutCount(limit = 4, cursor = projected.nextCursor)))
+
+      projected.items shouldBe whole.items.map(p => (p.id, p.lastName))
+      projected.nextCursor shouldBe whole.nextCursor
+      nextWhole.items.map(_.id) shouldBe Seq(4, 3, 2, 1)
+    }
+
+    "count the whole query" in {
+      val seeker = persons.filter(_.age > 30).toSeeker.seek(_.id.asc)
+
+      val page = await(db.run(seeker.pageAs(limit = 2, cursor = None)(_.firstName)))
+
+      page.total shouldBe 5
+      page.items shouldBe Seq("Charlie", "Eve")
+    }
+  }
+
 }

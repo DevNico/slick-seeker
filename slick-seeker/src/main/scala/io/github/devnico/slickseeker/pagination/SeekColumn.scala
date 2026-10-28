@@ -3,6 +3,7 @@ package io.github.devnico.slickseeker.pagination
 import io.github.devnico.slickseeker.cursor.CursorValueCodec
 import io.github.devnico.slickseeker.filter.{ColumnSeekFilter, ColumnSeekFilterTypes}
 import slick.ast.Ordering
+import slick.ast.TypedType
 import slick.lifted.{ColumnOrdered, Rep}
 
 private[slickseeker] trait SeekColumn[E, U, CVE] {
@@ -12,6 +13,7 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
   def col: E => ColumnOrdered[Column]
   def filter: ColumnSeekFilter[Column]
   def codec: CursorValueCodec[Column, CVE]
+  def typedType: () => TypedType[Column]
 
   def encodeCursor(value: Column): CVE = codec.encode(value)
 
@@ -37,8 +39,9 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
           }
         current.copy(ord = Ordering(newDir, finalNulls))
       }
-      val filter = self.filter
-      val codec  = self.codec
+      val filter    = self.filter
+      val codec     = self.codec
+      val typedType = self.typedType
     }
   }
 
@@ -59,8 +62,9 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
           case (Ordering.Desc, Ordering.NullsDefault) => newCol.nullsLast
         }
       }
-      val filter = self.filter
-      val codec  = self.codec
+      val filter    = self.filter
+      val codec     = self.codec
+      val typedType = self.typedType
     }
   }
 
@@ -75,17 +79,23 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         val columnOrdered = this.col(table)
         filter(columnOrdered, value, prevCond)
       }
+
+  /** Like [[appendToFilter]], with the cursor value bound as a query parameter of this column's type. */
+  def appendToFilterParam(table: E, value: Rep[?], valueIsNull: Boolean, prevCond: FilterCond): FilterCond =
+    filter.applyParam(this.col(table), value.asInstanceOf[Rep[Column]], valueIsNull, prevCond)
 }
 
 private[slickseeker] object SeekColumn {
   def apply[E, U, T, CVE](
       colFn: E => ColumnOrdered[T],
       filterFn: ColumnSeekFilter[T],
-      codecFn: CursorValueCodec[T, CVE]
+      codecFn: CursorValueCodec[T, CVE],
+      typedTypeFn: () => TypedType[T]
   ): SeekColumn[E, U, CVE] = new SeekColumn[E, U, CVE] {
     type Column = T
-    val col    = colFn
-    val filter = filterFn
-    val codec  = codecFn
+    val col       = colFn
+    val filter    = filterFn
+    val codec     = codecFn
+    val typedType = typedTypeFn
   }
 }
