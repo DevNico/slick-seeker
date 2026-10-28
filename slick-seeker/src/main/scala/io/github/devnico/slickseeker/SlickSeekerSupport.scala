@@ -339,7 +339,7 @@ object SlickSeekerSupport {
 
   private val sqlServerNationalString = "(?i)\\s*(nvarchar|nchar|national\\b).*".r
   private val sqlServerString         = "(?i)\\s*(varchar|char|character)\\b.*".r
-  private val sqlServerDatetime       = "(?i)\\s*(datetime|smalldatetime)\\s*".r
+  private val sqlServerDatetime       = "(?i)\\s*(datetime|smalldatetime)\\b.*".r
 
   private[slickseeker] def defaultCursorValueCast(profile: JdbcProfile, sqlType: String): Option[String] =
     profile match {

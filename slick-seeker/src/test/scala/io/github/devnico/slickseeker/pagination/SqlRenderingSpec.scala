@@ -6,6 +6,7 @@ import io.github.devnico.slickseeker.support.{MyH2Profile, SortDirection}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import MyH2Profile.api._
+import slick.lifted.ColumnOrdered
 import slick.jdbc.{HsqldbProfile, JdbcProfile, MySQLProfile, PostgresProfile, SQLServerProfile, SQLiteProfile}
 
 import java.time.LocalDateTime
@@ -78,6 +79,38 @@ class SqlRenderingSpec extends AnyWordSpec with Matchers {
       ) should not include "cast("
     }
 
+    "follow seek columns through mapped, re-mapped and joined queries to their declared type" in {
+      // The SQL of a page of `query` sought by `col` then the Int `id`, after the cursor (`value`, 5)
+      def render[E, U](query: Query[E, U, Seq], profile: JdbcProfile, value: String)(
+          col: E => ColumnOrdered[String],
+          id: E => ColumnOrdered[Int]
+      )(implicit shape: slick.lifted.Shape[slick.lifted.FlatShapeLevel, E, U, E]): String = {
+        val decoded = env.decodeWithDirectionOrThrow(Some(env.encode(Seq(value, "5"), CursorDirection.Forward)))
+        val seeker  = query.toSeeker.seek(col).seek(id)
+        profile.api.streamableQueryActionExtensionMethods(seeker.pageQuery(decoded, 2, SeekSettings.of(profile))).result
+          .statements.head
+      }
+      val mapped   = items.map(t => (t.id, t.uname, t.name))
+      val nvarchar = "cast(? as NVARCHAR(MAX))"
+      val shapes = Seq[JdbcProfile => String](
+        render(mapped.map(x => (x._1, x._2)), _, "n")(_._2.asc, _._1.asc),
+        render(mapped.map(x => (x._1, x._3, x._2)), _, "n")(_._3.asc, _._1.asc),
+        render(items.map(t => (t.id, (t.name, t.uname))).map(x => (x._1, x._2)), _, "n")(_._2._2.asc, _._1.asc),
+        render(mapped.sortBy(_._1).map(x => (x._2, x._1)), _, "n")(_._1.asc, _._2.asc),
+        render(mapped.join(items).on(_._1 === _.id), _, "n")(_._1._2.asc, _._1._1.asc)
+      )
+      // Every profile follows them (re-mapped queries used to overflow the stack)
+      all(shapes.map(_(MyH2Profile))) should include("> (?, ?)")
+      all(shapes.map(_(SQLServerProfile))) should include(nvarchar)
+      // An expression over columns of different declared types, or the varchar column re-mapped: no guessing
+      render(items, SQLServerProfile, "n")(t => (t.name ++ t.uname).asc, _.id.asc) should not include "cast("
+      render(items, SQLServerProfile, "n")(t => Case.If(t.id > 0).Then(t.name).Else(t.uname).asc, _.id.asc) should
+        not include "cast("
+      render(mapped.map(x => (x._1, x._3)), SQLServerProfile, "n")(_._2.asc, _._1.asc) should include(
+        "cast(? as VARCHAR(MAX))"
+      )
+    }
+
     "cast SQL Server's varchar, nvarchar, char, nchar, datetime and smalldatetime cursor values only" in {
       def cast(sqlType: String) = SlickSeekerSupport.defaultCursorValueCast(SQLServerProfile, sqlType)
       cast("VARCHAR(MAX)") shouldBe Some("VARCHAR(MAX)")
@@ -87,6 +120,7 @@ class SqlRenderingSpec extends AnyWordSpec with Matchers {
       cast("nchar(8)") shouldBe Some("NVARCHAR(MAX)")
       cast("datetime") shouldBe Some("DATETIME")
       cast("SMALLDATETIME") shouldBe Some("SMALLDATETIME")
+      cast("DATETIME NOT NULL") shouldBe Some("DATETIME")
       Seq("DATETIME2(6)", "DATETIMEOFFSET(6)", "INTEGER", "DECIMAL(21,2)", "UNIQUEIDENTIFIER", "TEXT").map(
         cast
       ) shouldBe

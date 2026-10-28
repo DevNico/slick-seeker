@@ -191,6 +191,16 @@ final class MatrixSchema(database: TestDatabase, profile0: MatrixProfile) extend
     seekCase(
       "mapped tuples: uname, legacyAt, id",
       itemsTable.map(i => (i.id, i.uname, i.legacyAt)).toSeeker.seek(_._2.asc).seek(_._3.desc).seek(_._1.asc)
-    )(_._1, _._1)
+    )(_._1, _._1),
+    seekCase(
+      "re-mapped tuples: uname, legacyAt, id",
+      itemsTable
+        .map(i => (i.id, i.uname, i.legacyAt))
+        .map(x => (x._3, x._1, x._2))
+        .toSeeker
+        .seek(_._3.asc)
+        .seek(_._1.desc)
+        .seek(_._2.asc)
+    )(_._2, _._2)
   )
 }

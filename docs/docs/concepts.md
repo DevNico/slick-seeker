@@ -65,7 +65,9 @@ see [Supported Databases](#supported-databases)); prefer `DECIMAL` columns or an
   column's declared type: its `O.SqlType`, else the type Slick's DDL gives it (`VARCHAR` for strings,
   `DATETIME2(6)` for timestamps). Declare `O.SqlType` on seek columns whose database type differs, e.g.
   `column[String]("name", O.SqlType("NVARCHAR(100)"))` or `column[LocalDateTime]("at", O.SqlType("DATETIME"))`.
-  An expression gets the declared type of the first column of its type in it (`_.name.toLowerCase`: `name`'s).
+  An expression gets the declared type of its columns of the same type (`_.name.toLowerCase`: `name`'s). Values of
+  an expression over columns of different declared types, or of a column of a query the seeker can't follow to its
+  table, are not cast: they compare as the driver binds them (`nvarchar`, `datetime2`).
   Override `seekerCursorValueCast` in your profile to change the casts.
 
 - On PostgreSQL, string-backed cursor values (`String` and types mapped to `String`) are bound untyped, as literals

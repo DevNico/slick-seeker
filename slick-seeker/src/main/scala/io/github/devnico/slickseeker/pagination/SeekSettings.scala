@@ -6,7 +6,9 @@ import slick.ast.{
   ElementSymbol,
   FieldSymbol,
   FilteredQuery,
+  GroupBy,
   IfThenElse,
+  Join,
   Library,
   LiteralNode,
   Node,
@@ -16,8 +18,10 @@ import slick.ast.{
   Pure,
   Select,
   StructNode,
+  TableNode,
   TypeMapping,
-  TypedType
+  TypedType,
+  Union
 }
 import slick.jdbc.{JdbcProfile, SQLServerProfile}
 import slick.lifted.{LiteralColumn, Rep}
@@ -96,28 +100,39 @@ private[slickseeker] object SeekSettings {
   }
 
   /** The declared SQL type of `column` (a column or expression of `tpe` over the elements of the query `base`): that of
-    * its column (`O.SqlType`, else the type Slick's DDL gives it), or of the first column of the same type in an
-    * expression, else the default type of `tpe`.
+    * its column (`O.SqlType`, else the type Slick's DDL gives it), or that of the columns of the same type in an
+    * expression if they all have the same one. None if that is not known (e.g. a column of a query this can't follow,
+    * or an expression over columns of different declared types).
     */
   def declaredType(profile: JdbcProfile, column: Node, base: Node, tpe: TypedType[?]): Option[String] = {
     val sqlType = profile.jdbcTypeFor(tpe).sqlType
-    def field(n: Node): Option[FieldSymbol] = n match {
-      case Select(_, f: FieldSymbol) => Some(f)
-      case path @ Select(_, _: ElementSymbol) =>
-        element(base, elementPath(path)).flatMap(field)
-      case other =>
-        other.children.iterator
-          .flatMap(field(_).iterator)
-          .find(f => scala.util.Try(profile.jdbcTypeFor(f.tpe).sqlType == sqlType).getOrElse(false))
-    }
-    scala.util
-      .Try(field(column) match {
-        case Some(f) =>
+    def declared(f: FieldSymbol): Option[String] =
+      scala.util
+        .Try(
           f.findColumnOption[SqlProfile.ColumnOption.SqlType]
             .fold(profile.jdbcTypeFor(f.tpe).sqlTypeName(Some(f)))(_.typeName)
-        case None => profile.jdbcTypeFor(tpe).sqlTypeName(None)
-      })
-      .toOption
+        )
+        .toOption
+    def sameType(f: FieldSymbol): Boolean =
+      scala.util.Try(profile.jdbcTypeFor(f.tpe).sqlType == sqlType).getOrElse(false)
+    // The declared types of the columns of `tpe` in `n`, None for one that is not known; element paths in `n` select
+    // from the elements of `scope`
+    def types(n: Node, scope: Node, top: Boolean): List[Option[String]] = n match {
+      case Select(_, f: FieldSymbol) => if (top || sameType(f)) List(declared(f)) else Nil
+      case path @ Select(_, _: ElementSymbol) =>
+        element(scope, elementPath(path)).fold(List(Option.empty[String])) { case (e, s) => types(e, s, top) }
+      case query if isQuery(query) => List(None)
+      case other                   => other.children.toSeq.toList.flatMap(types(_, scope, top = false))
+    }
+    types(column, base, top = true).distinct match {
+      case List(known) => known
+      case _           => None
+    }
+  }
+
+  private def isQuery(n: Node): Boolean = n match {
+    case _: Bind | _: FilteredQuery | _: Join | _: TableNode | _: Union | _: GroupBy => true
+    case _                                                                           => false
   }
 
   // The element symbols of a path into the query's elements, e.g. `_._2` of a query of tuples: List(ElementSymbol(2)).
@@ -126,11 +141,25 @@ private[slickseeker] object SeekSettings {
     case _                            => Nil
   }
 
-  // The expression a query's element path selects, if the query maps its elements (`query.map(t => (t.a, t.b))`).
-  private def element(query: Node, path: List[ElementSymbol]): Option[Node] = query match {
-    case Bind(_, _, Pure(value, _)) => path.foldLeft(Option(value))((n, e) => n.flatMap(child(_, e.idx)))
-    case filtered: FilteredQuery    => element(filtered.from, path)
-    case _                          => None
+  // The expression a query's element path selects, with the query its own element paths select from, if the query
+  // maps its elements (`query.map(t => (t.a, t.b))`), possibly under filters, sorts, joins and further maps.
+  private def element(query: Node, path: List[ElementSymbol]): Option[(Node, Node)] = query match {
+    case Bind(_, from, Pure(value, _)) => select(value, path, from)
+    case filtered: FilteredQuery       => element(filtered.from, path)
+    case join: Join =>
+      path match {
+        case e :: rest if e.idx == 1 => element(join.left, rest)
+        case e :: rest if e.idx == 2 => element(join.right, rest)
+        case _                       => None
+      }
+    case _ => None
+  }
+
+  // The node `path` selects in `value`, an element of a query over the elements of `scope`.
+  private def select(value: Node, path: List[ElementSymbol], scope: Node): Option[(Node, Node)] = (value, path) match {
+    case (_, Nil)                                 => Some((value, scope))
+    case (inner @ Select(_, _: ElementSymbol), _) => element(scope, elementPath(inner) ++ path)
+    case (n, e :: rest)                           => child(n, e.idx).flatMap(select(_, rest, scope))
   }
 
   private def child(n: Node, idx: Int): Option[Node] = n match {

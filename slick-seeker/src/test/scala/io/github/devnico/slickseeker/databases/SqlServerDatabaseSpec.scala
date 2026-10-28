@@ -141,7 +141,19 @@ final class SqlServerTypesSchema(database: TestDatabase, profile0: MatrixProfile
     seekCase(
       "mapped tuples: nvarchar, datetime, id",
       table.map(r => (r.id, (r.nvc, r.dt))).toSeeker.seek(_._2._1.asc).seek(_._2._2.desc).seek(_._1.asc)
-    )(_._1, _._1)
+    )(_._1, _._1),
+    seekCase(
+      "re-mapped and joined: varchar, datetime, id",
+      table
+        .map(r => (r.id, r.vc, r.dt))
+        .map(x => (x._3, x._2, x._1))
+        .join(table)
+        .on(_._3 === _.id)
+        .toSeeker
+        .seek(_._1._2.asc)
+        .seek(_._1._1.desc)
+        .seek(_._1._3.asc)
+    )(_._1._3, _._1._3)
   )
 }
 
