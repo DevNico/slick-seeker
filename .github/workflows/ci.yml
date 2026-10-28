@@ -51,6 +51,9 @@ jobs:
       - name: Run tests
         run: sbt ++${{ matrix.scala }} test
 
+      - name: Check binary compatibility
+        run: sbt ++${{ matrix.scala }} mimaReportBinaryIssues
+
   docs:
     name: Check Documentation
     runs-on: ubuntu-latest

@@ -1,9 +1,14 @@
 package io.github.devnico.slickseeker.pagination
 
 import io.github.devnico.slickseeker.cursor.CursorValueCodec
-import io.github.devnico.slickseeker.filter.{ColumnSeekFilter, ColumnSeekFilterTypes}
-import slick.ast.Ordering
-import slick.ast.TypedType
+import io.github.devnico.slickseeker.filter.{
+  BuiltInSeekFilter,
+  ColumnSeekFilter,
+  ColumnSeekFilterTypes,
+  NullableSeekFilter,
+  RowComparableSeekFilter
+}
+import slick.ast.{Node, Ordering, TypedType}
 import slick.lifted.{ColumnOrdered, Rep}
 
 private[slickseeker] trait SeekColumn[E, U, CVE] {
@@ -68,17 +73,53 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
     }
   }
 
+  /** Built-in filters get the cursor value bound as `settings` say; custom ones get the value. */
   def appendToFilter(
       table: E,
       cursor: CVE,
-      prevCond: FilterCond
+      prevCond: FilterCond,
+      settings: SeekSettings
   ): Option[FilterCond] =
     codec
       .decode(cursor)
       .map { value =>
         val columnOrdered = this.col(table)
-        filter(columnOrdered, value, prevCond)
+        filter match {
+          case builtIn: BuiltInSeekFilter[Column @unchecked] =>
+            builtIn.applyParam(columnOrdered, settings.bind(value, builtIn.valueType), value == None, prevCond)
+          case custom => custom(columnOrdered, value, prevCond)
+        }
       }
+
+  /** This column with a missing nulls ordering resolved to the database's default where its filter needs one (see
+    * [[NullableSeekFilter]]); applied before [[reversed]], which mirrors it.
+    */
+  def withDefaultNulls(settings: SeekSettings): SeekColumn[E, U, CVE] = filter match {
+    case _: NullableSeekFilter[?] =>
+      val self = this
+      new SeekColumn[E, U, CVE] {
+        type Column = self.Column
+        val col: E => ColumnOrdered[Column] = { table =>
+          val ordered = self.col(table)
+          if (ordered.ord.nulls != Ordering.NullsDefault) ordered
+          else ordered.copy(ord = ordered.ord.copy(nulls = settings.defaultNulls(ordered.ord.direction)))
+        }
+        val filter    = self.filter
+        val codec     = self.codec
+        val typedType = self.typedType
+      }
+    case _ => this
+  }
+
+  /** Whether this column can be part of a row value comparison (see [[RowComparableSeekFilter]]). */
+  def rowComparable: Boolean = filter.isInstanceOf[RowComparableSeekFilter[?]]
+
+  /** The decoded cursor value as a parameter of a row value comparison, if this column can be part of one. */
+  def rowValue(cursor: CVE, settings: SeekSettings): Option[Node] = filter match {
+    case f: RowComparableSeekFilter[Column @unchecked] =>
+      codec.decode(cursor).map(settings.bind(_, f.valueType).toNode)
+    case _ => None
+  }
 
   /** Like [[appendToFilter]], with the cursor value bound as a query parameter of this column's type. */
   def appendToFilterParam(table: E, value: Rep[?], valueIsNull: Boolean, prevCond: FilterCond): FilterCond =

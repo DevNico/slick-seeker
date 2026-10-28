@@ -106,7 +106,7 @@ final case class SlickPgTupleSeeker[E, U, CVE, C, CU, D <: Ordering.Direction](
     val resultsAction: DBIOAction[Seq[(U, CU)], NoStream, Effect.Read] = {
       val filtered  = baseQuery.filter(buildPgTupleFilter(_, queryColumns, rawCursor, isBackward))
       val sorted    = filtered.sortBy(buildOrdered(_, queryColumns, isBackward))
-      val limited   = sorted.take(normalizedLimit + 1)
+      val limited   = sorted.take(normalizedLimit.toLong + 1) // Long: + 1 overflows for Int.MaxValue
       val projected = qwc.project(limited)
       val ext       = streamableQueryActionExtensionMethods(projected)
       ext.result

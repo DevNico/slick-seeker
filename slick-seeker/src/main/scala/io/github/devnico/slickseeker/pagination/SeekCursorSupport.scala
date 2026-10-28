@@ -37,13 +37,14 @@ final private[slickseeker] case class SeekCursorSupport[E, U, CVE, C, CU](
     )
   }
 
-  /** The cursor values as parameters, nested like the cursor columns `(last, (…, (first, seed)))`. Needs the sort keys'
-    * `typedType`.
+  /** The cursor values as parameters of `paramType(column type)`, nested like the cursor columns `(last, (…, (first,
+    * seed)))`. Needs the sort keys' `typedType`.
     */
-  def paramShape: AnyShape =
+  def paramShape(paramType: TypedType[Any] => TypedType[Any]): AnyShape =
     columns.foldLeft(Shape.primitiveShape[Int, ColumnsShapeLevel](ScalaBaseType.intType).asInstanceOf[AnyShape]) {
       (tail, column) =>
-        val head = Shape.primitiveShape[Any, ColumnsShapeLevel](column.typedType().asInstanceOf[TypedType[Any]])
+        val head =
+          Shape.primitiveShape[Any, ColumnsShapeLevel](paramType(column.typedType().asInstanceOf[TypedType[Any]]))
         Shape.tuple2Shape(head, tail).asInstanceOf[AnyShape]
     }
 
@@ -55,7 +56,15 @@ final private[slickseeker] case class SeekCursorSupport[E, U, CVE, C, CU](
         for {
           t <- tail
           v <- column.codec.decode(value)
-        } yield (v, t)
+        } yield {
+          val tpe = column.typedType()
+          require(
+            SeekSettings.hasType(v, tpe),
+            s"The cursor value codec of a ${SeekSettings.describe(tpe)} column decoded ${v.getClass.getName}: compiled " +
+              "pages bind cursor values as parameters, so codecs must decode the column's type"
+          )
+          (v, t)
+        }
       }
 
   /** Which cursor values of [[decodeParams]] are `None`, first column first. */

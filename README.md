@@ -9,6 +9,7 @@ Type-safe, high-performance cursor-based pagination for Slick 3.5+.
 
 - **Keyset Pagination** - O(1) performance, no OFFSET
 - **Bidirectional** - Forward and backward navigation with a single query
+- **Row Value Comparisons** - `(a, b) > (x, y)` on PostgreSQL and H2 when the seek columns allow it
 - **Type-Safe** - Compile-time cursor/column verification
 - **Flexible** - Nulls handling, custom enum orders
 - **Projections** - Page a selection (e.g. ids) of a joined query with `pageAs` / `pageWithoutCountAs`

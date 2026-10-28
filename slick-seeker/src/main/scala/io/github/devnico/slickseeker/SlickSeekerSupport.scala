@@ -1,10 +1,28 @@
 package io.github.devnico.slickseeker
 
 import io.github.devnico.slickseeker.cursor.{CursorEnvironment, CursorValueCodec}
-import io.github.devnico.slickseeker.filter.{ColumnSeekFilter, ColumnSeekFilterTypes, SeekerSortKey, SeekOrder}
-import io.github.devnico.slickseeker.pagination.SlickSeeker
+import io.github.devnico.slickseeker.filter.{
+  ColumnSeekFilter,
+  ColumnSeekFilterTypes,
+  NullableSeekFilter,
+  RowComparableSeekFilter,
+  SeekerSortKey,
+  SeekOrder
+}
+import io.github.devnico.slickseeker.pagination.{SeekSettings, SlickSeeker}
 import slick.ast.{BaseTypedType, Ordering, ScalaBaseType, TypedType}
-import slick.jdbc.JdbcProfile
+import slick.jdbc.{
+  DB2Profile,
+  DerbyProfile,
+  H2Profile,
+  HsqldbProfile,
+  JdbcProfile,
+  MySQLProfile,
+  OracleProfile,
+  PostgresProfile,
+  SQLServerProfile,
+  SQLiteProfile
+}
 import slick.lifted
 
 /** SlickSeekerSupport trait provides cursor-based pagination support for Slick queries.
@@ -46,6 +64,24 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
   type DecodeError = CursorEnvironment.DecodeError
   val DecodeError: CursorEnvironment.DecodeError.type = CursorEnvironment.DecodeError
 
+  /** Whether seekers compare their seek columns with one row value comparison `(a, b) > (x, y)` when all of them are
+    * non-null with built-in filters and sort in the same direction (else they use `a > x OR (a = x AND b > y)`). On by
+    * default for PostgreSQL and H2; override to change it, e.g. for another database that supports row values.
+    */
+  def seekerRowComparisons: Boolean = SlickSeekerSupport.defaultRowComparisons(driver)
+
+  /** Whether seekers bind string-backed cursor values (`String` and types mapped to it) untyped, as literals would be,
+    * so they compare with PostgreSQL enums, `uuid` and other columns mapped to `String`. On by default for PostgreSQL.
+    */
+  def seekerUntypedStringParams: Boolean = SlickSeekerSupport.defaultUntypedStringParams(driver)
+
+  /** Whether the database sorts nulls after all values without a nulls clause (last ascending, first descending), as
+    * PostgreSQL, Oracle, DB2 and Derby do; H2, MySQL, SQLite, SQL Server and HSQLDB sort them first ascending. Seekers
+    * make that ordering explicit for `Option` columns without one, so pages follow the database's own order and
+    * indexes; override it if your database's default differs.
+    */
+  def seekerNullsSortHigh: Boolean = SlickSeekerSupport.defaultNullsSortHigh(driver)
+
   // Helper to get BaseTypedType[Int]
   protected def intBaseType: BaseTypedType[Int] = ScalaBaseType.intType match {
     case btt: BaseTypedType[Int @unchecked] => btt
@@ -56,10 +92,12 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
     // These implicits have access to driver.api._ from the outer scope
 
     implicit def seekFilterT[T](implicit btt: BaseTypedType[T]): ColumnSeekFilter[T] =
-      new ColumnSeekFilter[T] {
-        // The ad-hoc seeker's literal goes through the same conditions as a compiled page's bound parameter.
+      new RowComparableSeekFilter[T] {
+        def valueType: TypedType[T] = btt
+
+        // Seekers bind the value and call applyParam (as compiled pages do); this is for direct calls.
         def apply(ordered: lifted.ColumnOrdered[T], value: T, prevCond: FilterCond): FilterCond =
-          applyParam(ordered, lifted.LiteralColumn(value), valueIsNull = false, prevCond)
+          applyParam(ordered, SeekSettings.of(driver).bind(value, valueType), valueIsNull = false, prevCond)
 
         override def applyParam(
             ordered: lifted.ColumnOrdered[T],
@@ -74,9 +112,11 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
       }
 
     implicit def seekFilterOptT[T](implicit btt: BaseTypedType[T]): ColumnSeekFilter[Option[T]] =
-      new ColumnSeekFilter[Option[T]] {
+      new NullableSeekFilter[Option[T]] {
+        def valueType: TypedType[Option[T]] = btt.optionType
+
         def apply(ordered: lifted.ColumnOrdered[Option[T]], value: Option[T], prevCond: FilterCond): FilterCond =
-          applyParam(ordered, lifted.LiteralColumn(value)(btt.optionType), value.isEmpty, prevCond)
+          applyParam(ordered, SeekSettings.of(driver).bind(value, valueType), value.isEmpty, prevCond)
 
         override def applyParam(
             ordered: lifted.ColumnOrdered[Option[T]],
@@ -264,4 +304,20 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
 
   // Make the profile available for the page method
   implicit def jdbcProfile: JdbcProfile = driver
+}
+
+object SlickSeekerSupport {
+  private[slickseeker] def defaultRowComparisons(profile: JdbcProfile): Boolean = profile match {
+    case _: PostgresProfile | _: H2Profile => true
+    case _                                 => false
+  }
+
+  private[slickseeker] def defaultUntypedStringParams(profile: JdbcProfile): Boolean =
+    profile.isInstanceOf[PostgresProfile]
+
+  private[slickseeker] def defaultNullsSortHigh(profile: JdbcProfile): Boolean = profile match {
+    case _: H2Profile | _: MySQLProfile | _: SQLiteProfile | _: SQLServerProfile | _: HsqldbProfile => false
+    case _: PostgresProfile | _: OracleProfile | _: DB2Profile | _: DerbyProfile                    => true
+    case _                                                                                          => true
+  }
 }
