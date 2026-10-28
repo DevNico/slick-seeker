@@ -1,7 +1,7 @@
 package io.github.devnico.slickseeker.pagination
 
 import io.github.devnico.slickseeker.cursor._
-import io.github.devnico.slickseeker.support.MyH2Profile
+import io.github.devnico.slickseeker.support.{MyH2Profile, SortDirection}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import MyH2Profile.api._
@@ -61,6 +61,17 @@ class SqlRenderingSpec extends AnyWordSpec with Matchers {
       all(
         backward.map(_._2.toLowerCase)
       ) should (not include "is null" and not include "isnull" and not include "nulls")
+    }
+
+    "give non-null columns no nulls clause with seekDirection either" in {
+      Seq(SortDirection.Asc, SortDirection.Desc).foreach { direction =>
+        val seeker = byNameId.seekDirection(direction)
+        Seq(CursorDirection.Forward, CursorDirection.Backward).foreach { cursorDirection =>
+          all(Seq(MySQLProfile, SQLServerProfile, SQLiteProfile, PostgresProfile).map { profile =>
+            sql(seeker, profile, Seq("n1", "5"), cursorDirection).toLowerCase
+          }) should (not include "is null" and not include "isnull" and not include "nulls")
+        }
+      }
     }
 
     "write the database's default nulls placement out for Option columns" in {

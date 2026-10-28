@@ -21,7 +21,7 @@ import scala.util.Try
   *   with SlickSeekerSupport
   *   with PlayJsonSeekerSupport {
   *
-  *   object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+  *   object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
   *
   *   override val api: MyApi.type = MyApi
   * }
@@ -76,7 +76,7 @@ trait PlayJsonSeekerSupport { driver: JdbcProfile =>
     *   with SlickSeekerSupport
     *   with PlayJsonSeekerSupport {
     *
-    *   object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+    *   object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
     *
     *   override val api: MyApi.type = MyApi
     * }

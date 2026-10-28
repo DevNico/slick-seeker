@@ -59,13 +59,19 @@ therefore decode the column's type; values of another type are written as litera
 Floating-point seek columns stay fragile where the driver sends parameters as text (MariaDB, MySQL with client-side
 prepared statements); prefer `DECIMAL` columns or another seek column there.
 
-- On SQL Server, ad-hoc pages write cursor values as literals (`seekerBindCursorValues = false` by default): its JDBC
-  driver binds strings as `nvarchar` and timestamps as `datetime2`, which compare differently with `varchar` and
-  `datetime` columns than those columns sort, so pages would skip or repeat rows. Compiled pages always bind: on SQL
-  Server, set `sendStringParametersAsUnicode=false` and `datetimeParameterType=datetime` in the JDBC URL (or use
-  `nvarchar` and `datetime2` columns). Also on SQL Server, `page` / `pageWithoutCount` fail with `Ambiguous column name`
-  when a seek column is part of the element (Slick selects it twice); page a selection without the seek columns with
-  `pageAs` / `pageWithoutCountAs` instead.
+- SQL Server support is limited: a cursor value only compares like the column sorts if it has the column's exact
+  type, and neither literals nor the driver's parameters always do.
+    - Ad-hoc pages write cursor values as literals there by default (`seekerBindCursorValues = false`, as in earlier
+      versions). Slick writes strings as `'…'` (`varchar`), so `nvarchar` seek columns holding characters outside the
+      collation's code page loop; set `seekerBindCursorValues = true` for such schemas.
+    - Parameters (always used by compiled pages) are `nvarchar` strings and `datetime2` timestamps by default, which
+      skip or repeat rows on `varchar` and `datetime` seek columns. The driver properties
+      `sendStringParametersAsUnicode=false` and `datetimeParameterType=datetime` change that for the whole connection,
+      so they only help if all string seek columns are `varchar` and all timestamp seek columns `datetime` (and they
+      affect the application's other statements too).
+    - `page` / `pageWithoutCount` fail with `Ambiguous column name`, and so does a selection containing a seek column
+      (Slick selects it twice): page a selection of other columns or of expressions (e.g. `_.id + 0`) with `pageAs` /
+      `pageWithoutCountAs` or `CompiledSeekPage`.
 
 - On PostgreSQL, string-backed cursor values (`String` and types mapped to `String`) are bound untyped, as literals
   would be, so they compare with native enums, `uuid` and other columns mapped to `String`. Override
@@ -137,7 +143,7 @@ trait MyProfile extends H2Profile with SlickSeekerSupport {
 }
 ```
 
-`seekDirection` sets the null ordering with the direction:
+`seekDirection` sets its own null ordering with the direction, as in earlier versions (not the database's default):
 
 ```scala
 // ASC: nulls last
