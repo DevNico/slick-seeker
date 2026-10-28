@@ -1,9 +1,9 @@
 package io.github.devnico.slickseeker.pagination
 
 import io.github.devnico.slickseeker.cursor.{CursorDirection, CursorEnvironment}
-import io.github.devnico.slickseeker.filter.{SeekerSortKey, ColumnSeekFilterTypes}
+import io.github.devnico.slickseeker.filter.{ColumnSeekFilterTypes, SeekerSortKey}
 import io.github.devnico.slickseeker.support.{QueryWithCursor, SortDirection}
-import slick.ast.{BaseTypedType, ScalaBaseType}
+import slick.ast.{Apply, BaseTypedType, Library, Node, Ordering, ProductNode, ScalaBaseType}
 import slick.dbio
 import slick.jdbc.JdbcProfile
 import slick.lifted
@@ -86,7 +86,9 @@ final case class SlickSeeker[E, U, CVE, C, CU](
   ): profile.api.DBIOAction[PaginatedResultWithoutCount[U], profile.api.NoStream, profile.api.Effect.Read] = {
     val theApi = profile.api
     import theApi._
-    pageRows[U](limit, cursor, maxLimit)(limited => streamableQueryActionExtensionMethods(qwc.project(limited)).result)
+    pageRows[U](limit, cursor, maxLimit, SeekSettings.of(profile))(limited =>
+      streamableQueryActionExtensionMethods(qwc.project(limited)).result
+    )
   }
 
   /** Like [[page]], but the items are `select(e)` instead of whole elements (see [[pageWithoutCountAs]]). */
@@ -125,7 +127,7 @@ final case class SlickSeeker[E, U, CVE, C, CU](
   ): profile.api.DBIOAction[PaginatedResultWithoutCount[PU], profile.api.NoStream, profile.api.Effect.Read] = {
     val theApi = profile.api
     import theApi._
-    pageRows[PU](limit, cursor, maxLimit)(limited =>
+    pageRows[PU](limit, cursor, maxLimit, SeekSettings.of(profile))(limited =>
       streamableQueryActionExtensionMethods(qwc.projectAs(limited)(select)).result
     )
   }
@@ -133,27 +135,42 @@ final case class SlickSeeker[E, U, CVE, C, CU](
   private def pageRows[I](
       limit: Int,
       cursor: Option[String],
-      maxLimit: Int
+      maxLimit: Int,
+      settings: SeekSettings
   )(
       run: lifted.Query[E, U, Seq] => dbio.DBIOAction[Seq[(I, CU)], dbio.NoStream, dbio.Effect.Read]
   )(implicit
       cursorEnvironment: CursorEnvironment[CVE],
       ec: ExecutionContext
   ): dbio.DBIOAction[PaginatedResultWithoutCount[I], dbio.NoStream, dbio.Effect.Read] = {
-    val decodedCursor = cursorEnvironment.decodeWithDirectionOrThrow(cursor)
-    val isBackward    = decodedCursor.exists(_._1 == CursorDirection.Backward)
-    val rawCursor     = decodedCursor.map(_._2)
+    val decodedCursor   = cursorEnvironment.decodeWithDirectionOrThrow(cursor)
+    val normalizedLimit = SlickSeeker.normalizeLimit(limit, maxLimit)
 
-    val queryColumns = if (isBackward) columns.map(_.reversed) else columns
-
-    val normalizedLimit = limit.max(1).min(maxLimit)
-
-    val filtered = baseQuery.filter(buildFilter(_, queryColumns, rawCursor))
-    val sorted   = filtered.sortBy(buildOrdered(_, queryColumns))
-
-    run(sorted.take(normalizedLimit + 1)).map(results =>
-      cursorSupport.toPage(results, isBackward, rawCursor.exists(_.nonEmpty), normalizedLimit)
+    run(pageQuery(decodedCursor, normalizedLimit, settings)).map(results =>
+      cursorSupport.toPage(
+        results,
+        decodedCursor.exists(_._1 == CursorDirection.Backward),
+        decodedCursor.exists(_._2.nonEmpty),
+        normalizedLimit
+      )
     )
+  }
+
+  /** The query of a page: up to `normalizedLimit + 1` elements after the decoded cursor. */
+  private[slickseeker] def pageQuery(
+      decodedCursor: Option[(CursorDirection, Seq[CVE])],
+      normalizedLimit: Int,
+      settings: SeekSettings
+  ): lifted.Query[E, U, Seq] = {
+    val queryColumns = columnsFor(decodedCursor.exists(_._1 == CursorDirection.Backward), settings)
+    val filtered     = baseQuery.filter(buildFilter(_, queryColumns, decodedCursor.map(_._2), settings))
+    filtered.sortBy(buildOrdered(_, queryColumns)).take(normalizedLimit + 1)
+  }
+
+  /** The seek columns of a page in its direction, with default nulls resolved for `settings`' database. */
+  private def columnsFor(isBackward: Boolean, settings: SeekSettings): Vector[SeekColumn[E, U, CVE]] = {
+    val resolved = columns.map(_.withDefaultNulls(settings))
+    if (isBackward) resolved.map(_.reversed) else resolved
   }
 
   /** The cursor of this seeker without its query, for [[CompiledSeekPage]]. */
@@ -167,23 +184,30 @@ final case class SlickSeeker[E, U, CVE, C, CU](
       cursor: Option[Any],
       nullFlags: List[Boolean],
       isBackward: Boolean,
-      limit: lifted.ConstColumn[Long]
+      limit: lifted.ConstColumn[Long],
+      settings: SeekSettings
   )(select: E => P)(implicit
       pShape: lifted.Shape[lifted.FlatShapeLevel, P, PU, P]
   ): lifted.Query[(P, C), (PU, CU), Seq] = {
-    val queryColumns = if (isBackward) columns.map(_.reversed) else columns
+    val queryColumns = columnsFor(isBackward, settings)
     val filtered = cursor match {
       case None => baseQuery
       case Some(params) =>
         val reps = flattenParams(params)
+        require(
+          reps.size == queryColumns.size && nullFlags.size == queryColumns.size,
+          s"${reps.size} cursor parameters and ${nullFlags.size} null flags for ${queryColumns.size} seek columns"
+        )
         baseQuery.filter { table =>
-          reps
-            .zip(nullFlags)
-            .zip(queryColumns)
-            .reverse
-            .foldLeft[FilterCond](alwaysFalse) { case (prevCond, ((rep, isNull), column)) =>
-              column.appendToFilterParam(table, rep, isNull, prevCond)
-            }
+          rowFilter(table, queryColumns, reps.map(_.toNode), settings).getOrElse {
+            reps
+              .zip(nullFlags)
+              .zip(queryColumns)
+              .reverse
+              .foldLeft[FilterCond](alwaysFalse) { case (prevCond, ((rep, isNull), column)) =>
+                column.appendToFilterParam(table, rep, isNull, prevCond)
+              }
+          }
         }
     }
     qwc.projectAs(filtered.sortBy(buildOrdered(_, queryColumns)).take(limit))(select)
@@ -192,14 +216,46 @@ final case class SlickSeeker[E, U, CVE, C, CU](
   private def buildFilter(
       table: E,
       columns: Seq[SeekColumn[E, U, CVE]],
-      cursorValues: Option[Seq[CVE]]
+      cursorValues: Option[Seq[CVE]],
+      settings: SeekSettings
+  ): FilterCond =
+    cursorValues
+      .filter(values => settings.rowComparisons && values.size == columns.size)
+      .flatMap(values => sequence(columns.zip(values).map { case (column, value) => column.rowValue(value, settings) }))
+      .flatMap(rowFilter(table, columns, _, settings))
+      .getOrElse(buildChainFilter(table, columns, cursorValues, settings))
+
+  /** `(a, b) > (x, y)` (or `<` for descending columns) if row value comparisons are on and the columns qualify: at
+    * least two, all [[SeekColumn.rowComparable]] and sorting in the same direction. Equal to the chained conditions
+    * then.
+    */
+  private def rowFilter(
+      table: E,
+      columns: Seq[SeekColumn[E, U, CVE]],
+      values: Seq[Node],
+      settings: SeekSettings
+  ): Option[FilterCond] =
+    if (!settings.rowComparisons || columns.size < 2 || !columns.forall(_.rowComparable)) None
+    else {
+      val ordered = columns.map(_.col(table))
+      ordered.map(_.ord.direction).distinct match {
+        case Seq(direction) => Some(rowComparison(ordered.map(_.column.toNode), values, direction))
+        case _              => None
+      }
+    }
+
+  private def buildChainFilter(
+      table: E,
+      columns: Seq[SeekColumn[E, U, CVE]],
+      cursorValues: Option[Seq[CVE]],
+      settings: SeekSettings
   ): FilterCond = {
     val zipped = cursorValues.getOrElse(Seq.empty).zip(columns).reverse
     if (zipped.isEmpty) {
       alwaysTrue
     } else {
       val filter = zipped.foldLeft[Option[FilterCond]](Some(alwaysFalse)) { case (prevCond, (cursorValue, column)) =>
-        prevCond.flatMap(column.appendToFilter(table, cursorValue, _))
+        prevCond.flatMap(column.appendToFilter(table, cursorValue, _, settings))
       }
       filter.getOrElse(alwaysTrue)
     }
@@ -214,9 +270,24 @@ object SlickSeeker {
   import ColumnSeekFilterTypes._
 
   // Cursor parameters nest as (last column, (…, (first column, seed))); the seed is not a cursor column.
-  private def flattenParams(params: Any): List[lifted.Rep[?]] = params match {
-    case (head: lifted.Rep[?], tail) => flattenParams(tail) :+ head
-    case _                           => Nil
+  @scala.annotation.tailrec
+  private def flattenParams(params: Any, acc: List[lifted.Rep[?]] = Nil): List[lifted.Rep[?]] = params match {
+    case (head: lifted.Rep[?], tail) => flattenParams(tail, head :: acc)
+    case _                           => acc
+  }
+
+  /** `limit` within 1 and `maxLimit`, and below Int.MaxValue so that the fetched `limit + 1` fits an Int. */
+  private[slickseeker] def normalizeLimit(limit: Int, maxLimit: Int): Int =
+    limit.max(1).min(maxLimit).min(Int.MaxValue - 1)
+
+  private def sequence[T](options: Seq[Option[T]]): Option[Seq[T]] =
+    if (options.forall(_.isDefined)) Some(options.flatten) else None
+
+  private def rowComparison(columns: Seq[Node], values: Seq[Node], direction: Ordering.Direction): FilterCond = {
+    implicit val condType: slick.ast.TypedType[Option[Boolean]] = ScalaBaseType.booleanType.optionType
+    val operator                                                = if (direction == Ordering.Asc) Library.> else Library.<
+    val row                                                     = (nodes: Seq[Node]) => ProductNode(slick.util.ConstArray.from(nodes))
+    lifted.Rep.forNode[Option[Boolean]](Apply(operator, slick.util.ConstArray(row(columns), row(values)))(condType))
   }
 
   private def alwaysTrue: FilterCond = {

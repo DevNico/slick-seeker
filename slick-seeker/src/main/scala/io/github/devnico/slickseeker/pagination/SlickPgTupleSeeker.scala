@@ -101,7 +101,7 @@ final case class SlickPgTupleSeeker[E, U, CVE, C, CU, D <: Ordering.Direction](
     val rawCursor     = decodedCursor.map(_._2)
 
     val queryColumns    = columns // Direction is fixed at seeker level
-    val normalizedLimit = limit.max(1).min(maxLimit)
+    val normalizedLimit = SlickSeeker.normalizeLimit(limit, maxLimit)
 
     val resultsAction: DBIOAction[Seq[(U, CU)], NoStream, Effect.Read] = {
       val filtered  = baseQuery.filter(buildPgTupleFilter(_, queryColumns, rawCursor, isBackward))

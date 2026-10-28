@@ -31,15 +31,14 @@ import scala.concurrent.ExecutionContext
   * `val` or a cache entry) and reuse it.
   *
   * For every cursor this seeker produced, items and cursors are the same as those of
-  * [[SlickSeeker.pageWithoutCountAs]]. Cursors whose values don't decode or don't match the cursor columns give the
-  * first page (the ad-hoc seeker partly filters on them instead).
+  * [[SlickSeeker.pageWithoutCountAs]], with row value comparisons where the seeker uses them. Cursors whose values
+  * don't decode or don't match the cursor columns give the first page (the ad-hoc seeker then pages without a cursor
+  * filter, or filters on the leading columns if there are fewer values than columns).
   *
   * Requirements: at least one seek column; the sort keys provide
   * [[io.github.devnico.slickseeker.filter.SeekerSortKey.typedType]] and their filters
   * [[io.github.devnico.slickseeker.filter.ColumnSeekFilter.applyParam]] (the built-in ones do; both checked on
-  * creation); the cursor value codecs decode values of their real type (bound parameters are not rendered via
-  * `toString` like literals); cursor values bind with the column's JDBC type, so e.g. PostgreSQL enums mapped to
-  * `String` need a type binding as `Types.OTHER` (see the docs).
+  * creation); the cursor value codecs decode values of the column's type (checked per page).
   */
 final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     build: A => SlickSeeker[E, U, CVE, Any, Any],
@@ -50,12 +49,16 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     selectShape: Shape[FlatShapeLevel, P, PU, P],
     profile: JdbcProfile
 ) {
+  // The cursor's types (C, CU) grow with every `seek` and can't be named here, so they are erased to `Any`. The casts
+  // below are safe because cursor shapes, parameters and decoded values all come from the same seeker structure.
   private type Rows      = Seq[(PU, Any)]
   private type PageQuery = Query[(P, Any), (PU, Any), Seq]
 
   private val longType: TypedType[Long] = ScalaBaseType.longType
   private val limitShape: Shape[ColumnsShapeLevel, Long, Long, ConstColumn[Long]] =
     Shape.primitiveShape[Long, ColumnsShapeLevel](longType)
+
+  private val settings = SeekSettings.of(profile)
 
   private def placeholder[T](what: String): Any => T = _ => throw new IllegalStateException(s"$what (structure only)")
 
@@ -66,15 +69,16 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     require(structure.columns.nonEmpty, "CompiledSeekPage needs a seeker with at least one seek column")
     // Fails here rather than on the first cursor page if a sort key or filter cannot bind parameters.
     structure.paramPageQuery[P, PU](
-      Some(structure.cursorSupport.paramShape.buildParams(placeholder("cursor value"))),
+      Some(structure.cursorSupport.paramShape(settings.paramType).buildParams(placeholder("cursor value"))),
       List.fill(structure.columns.size)(false),
       isBackward = false,
-      limitShape.buildParams(placeholder("limit"))
+      limitShape.buildParams(placeholder("limit")),
+      settings
     )(select)
     structure.cursorSupport
   }
 
-  private val cursorShape = cursorSupport.paramShape
+  private val cursorShape = cursorSupport.paramShape(settings.paramType)
 
   /** The most page query forms this instance can create: the first page, and forward and backward per combination of
     * `None` values in nullable cursor columns.
@@ -83,7 +87,7 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
 
   private val firstPage = compile[(AU, Long), PageQuery, Rows](Shape.tuple2Shape(appShape, limitShape)) { params =>
     val (a, limit) = params.asInstanceOf[(A, ConstColumn[Long])]
-    build(a).paramPageQuery[P, PU](None, Nil, isBackward = false, limit)(select)
+    build(a).paramPageQuery[P, PU](None, Nil, isBackward = false, limit, settings)(select)
   }
 
   private val cursorPages =
@@ -95,7 +99,7 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
       _ =>
         compile[(AU, Any, Long), PageQuery, Rows](Shape.tuple3Shape(appShape, cursorShape, limitShape)) { params =>
           val (a, cursor, limit) = params.asInstanceOf[(A, Any, ConstColumn[Long])]
-          build(a).paramPageQuery[P, PU](Some(cursor), nullFlags, isBackward, limit)(select)
+          build(a).paramPageQuery[P, PU](Some(cursor), nullFlags, isBackward, limit, settings)(select)
         }
     )
 
@@ -138,7 +142,7 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
   ): dbio.DBIOAction[PaginatedResultWithoutCount[PU], dbio.NoStream, dbio.Effect.Read] = {
     import profile.api._
 
-    val normalizedLimit = limit.max(1).min(maxLimit)
+    val normalizedLimit = SlickSeeker.normalizeLimit(limit, maxLimit)
     val fetchLimit      = normalizedLimit.toLong + 1
     val decoded = cursorEnvironment
       .decodeWithDirectionOrThrow(cursor)

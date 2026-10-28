@@ -87,7 +87,8 @@ val seeker = ordersWithUsers.toSeeker
 
 Joins needed only for sorting or searching don't have to be selected. `pageAs` / `pageWithoutCountAs` page a
 selection of the element while filtering, sorting and the cursor still use the whole element, e.g. to page ids and load
-the rows of a page separately. Cursors are the same as those of `page` / `pageWithoutCount`.
+the rows of a page separately. Cursors are the same as those of `page` / `pageWithoutCount`. (`SlickSeeker` only, not
+`SlickPgTupleSeeker`.)
 
 ```scala
 val seeker = ordersWithUsers.toSeeker
@@ -207,7 +208,9 @@ val seeker = persons.toSeeker
 
 ## PostgreSQL Tuple Optimization
 
-For PostgreSQL databases, use `SlickPgTupleSeeker` for type-safe, tuple-optimized pagination. This generates simpler SQL with compile-time safety guarantees.
+On PostgreSQL and H2, `toSeeker` already compares its seek columns as one row value when all of them are non-nullable
+and sort in the same direction (see [Row Value Comparisons](concepts.md#row-value-comparisons)), so you get the tuple
+SQL without choosing a seeker. `SlickPgTupleSeeker` additionally checks these conditions at compile time.
 
 ### Standard Approach (Default)
 
@@ -219,7 +222,8 @@ val seeker = users.toSeeker
 
 Generates SQL like:
 ```sql
-WHERE (name > ?) OR (name = ? AND id > ?)
+WHERE (name, id) > (?, ?)                     -- PostgreSQL / H2, uniform non-nullable columns
+WHERE (name > ?) OR (name = ? AND id > ?)     -- otherwise
 ORDER BY name ASC, id ASC
 ```
 
@@ -239,13 +243,13 @@ ORDER BY name ASC, id ASC
 
 ### When to Use
 
-- **Use `toPgTupleSeekerAsc` / `toPgTupleSeekerDesc`** when:
+- **Use `toPgTupleSeekerAsc` / `toPgTupleSeekerDesc`** (for the compile-time checks; `toSeeker` generates the same
+  row comparison, with typed parameters instead of string literals) when:
   - Your database is PostgreSQL 8.2+ or H2 in PostgreSQL mode
   - You have multiple seek columns (2 or more)
   - **All seek columns are non-nullable** (compile-time enforced)
   - **All seek columns have the SAME sort direction** (compile-time enforced)
-  - Query performance is critical
-  - You want maximum type safety
+  - You want these conditions checked at compile time
 
 - **Use standard `.toSeeker`** when:
   - You need database portability (H2, MySQL, SQLite)
@@ -352,7 +356,7 @@ trait MyPostgresProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
   override val api: MyApi.type = MyApi
 }
 
@@ -413,7 +417,8 @@ val expensiveFirst = db.run(descSeeker.page(limit = 10, cursor = None))
 
 ### Migration Guide
 
-If you're currently using `SlickSeeker` with uniform non-nullable columns on PostgreSQL:
+`toSeeker` seekers with uniform non-nullable columns already use tuple comparisons on PostgreSQL, so migrating is only
+worth it for the compile-time checks:
 
 **Before:**
 ```scala
@@ -585,7 +590,7 @@ trait MyProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits {
     override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
       CursorEnvironment(jsonCursorCodec, IdentityDecorator())
   }
@@ -629,7 +634,7 @@ trait MyProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits {
     override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
       CursorEnvironment(jsonCursorCodec, Base64Decorator(GzipDecorator()))
   }
@@ -679,7 +684,7 @@ trait MyProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits {
     override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
       CursorEnvironment(jsonCursorCodec, Base64Decorator(HMACDecorator("your-secret-key")))
   }
@@ -731,7 +736,7 @@ trait MyProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits {
     override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
       CursorEnvironment(jsonCursorCodec, Base64Decorator(AESDecorator("my-secret-key-16")))
   }

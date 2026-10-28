@@ -31,6 +31,8 @@ ThisBuild / makePomConfiguration := makePomConfiguration.value.withConfiguration
 
 // Version and Scala settings
 val slickSeekerVersion = "0.6.1"
+// The release binary compatibility is checked against (mimaReportBinaryIssues); bump it after each release
+val mimaBaseVersion = "0.6.1"
 
 val scala3Version   = "3.3.5"
 val scala213Version = "2.13.16"
@@ -59,13 +61,15 @@ lazy val commonSettings = Seq(
     case _ =>
       Seq.empty
   }),
-  libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % Test
+  libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % Test,
+  mimaPreviousArtifacts                  := Set(organization.value %% name.value % mimaBaseVersion)
 )
 
 lazy val root = (project in file("."))
   .settings(
-    name           := "slick-seeker-root",
-    publish / skip := true
+    name                  := "slick-seeker-root",
+    publish / skip        := true,
+    mimaPreviousArtifacts := Set.empty
   )
   .aggregate(core, playJson)
 
@@ -76,7 +80,11 @@ lazy val core = (project in file("slick-seeker"))
     libraryDependencies ++= Seq(
       "com.typesafe.slick" %% "slick"     % slickVersion,
       "com.h2database"      % "h2"        % "2.4.240" % Test,
-      "org.slf4j"           % "slf4j-nop" % "2.0.17"  % Test
+      "org.slf4j"           % "slf4j-nop" % "2.0.17"  % Test,
+      // Real PostgreSQL for PostgreSqlSpec (needs Docker; the spec is canceled without it)
+      "org.testcontainers" % "testcontainers-postgresql" % "2.0.5"   % Test,
+      "org.postgresql"     % "postgresql"                % "42.7.14" % Test,
+      "org.hsqldb"         % "hsqldb"                    % "2.7.4"   % Test
     )
   )
 

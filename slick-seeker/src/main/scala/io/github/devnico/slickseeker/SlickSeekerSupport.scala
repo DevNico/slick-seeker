@@ -1,10 +1,28 @@
 package io.github.devnico.slickseeker
 
 import io.github.devnico.slickseeker.cursor.{CursorEnvironment, CursorValueCodec}
-import io.github.devnico.slickseeker.filter.{ColumnSeekFilter, ColumnSeekFilterTypes, SeekerSortKey, SeekOrder}
-import io.github.devnico.slickseeker.pagination.SlickSeeker
+import io.github.devnico.slickseeker.filter.{
+  ColumnSeekFilter,
+  ColumnSeekFilterTypes,
+  NullableSeekFilter,
+  RowComparableSeekFilter,
+  SeekerSortKey,
+  SeekOrder
+}
+import io.github.devnico.slickseeker.pagination.{SeekSettings, SlickSeeker}
 import slick.ast.{BaseTypedType, Ordering, ScalaBaseType, TypedType}
-import slick.jdbc.JdbcProfile
+import slick.jdbc.{
+  DB2Profile,
+  DerbyProfile,
+  H2Profile,
+  HsqldbProfile,
+  JdbcProfile,
+  MySQLProfile,
+  OracleProfile,
+  PostgresProfile,
+  SQLServerProfile,
+  SQLiteProfile
+}
 import slick.lifted
 
 /** SlickSeekerSupport trait provides cursor-based pagination support for Slick queries.
@@ -20,8 +38,8 @@ import slick.lifted
   *   with SlickSeekerSupport
   *   with PlayJsonSeekerSupport {
   *
-  *   object MyAPI extends super.API with SeekImplicits with JsonSeekerImplicits
-  *   override val api: MyAPI = MyAPI
+  *   object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
+  *   override val api: MyApi.type = MyApi
   * }
   *
   * object MyPostgresProfile extends MyPostgresProfile
@@ -46,6 +64,33 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
   type DecodeError = CursorEnvironment.DecodeError
   val DecodeError: CursorEnvironment.DecodeError.type = CursorEnvironment.DecodeError
 
+  /** Whether seekers compare their seek columns with one row value comparison `(a, b) > (x, y)` when all of them are
+    * non-null with built-in filters and sort in the same direction (else they use `a > x OR (a = x AND b > y)`). On by
+    * default for PostgreSQL and H2; override to change it, e.g. for another database that supports row values.
+    */
+  def seekerRowComparisons: Boolean = SlickSeekerSupport.defaultRowComparisons(driver)
+
+  /** Whether seekers bind string-backed cursor values (`String` and types mapped to it) untyped, as literals would be,
+    * so they compare with PostgreSQL enums, `uuid` and other columns mapped to `String`. On by default for PostgreSQL.
+    */
+  def seekerUntypedStringParams: Boolean = SlickSeekerSupport.defaultUntypedStringParams(driver)
+
+  /** Where the database puts nulls in `direction` without a nulls clause. Seekers write it out for `Option` columns
+    * without one, so pages follow the database's own order and indexes. Defaults: last ascending and first descending
+    * for PostgreSQL, Oracle, DB2 and Derby (and unknown databases); first ascending and last descending for H2, MySQL,
+    * SQLite and SQL Server; first in both directions for HSQLDB. Override it if your database or its configuration
+    * sorts nulls differently (a wrong placement costs index use, not correctness).
+    */
+  def seekerDefaultNulls(direction: Ordering.Direction): Ordering.NullOrdering =
+    SlickSeekerSupport.defaultNulls(driver, direction)
+
+  /** Whether ad-hoc pages bind cursor values as parameters of the column's type (compiled pages always do) rather than
+    * writing them as SQL literals. On by default, except for SQL Server: its driver binds strings as `nvarchar` and
+    * timestamps as `datetime2` by default, which compare differently with `varchar` and `datetime` columns than the
+    * columns sort.
+    */
+  def seekerBindCursorValues: Boolean = SlickSeekerSupport.defaultBindCursorValues(driver)
+
   // Helper to get BaseTypedType[Int]
   protected def intBaseType: BaseTypedType[Int] = ScalaBaseType.intType match {
     case btt: BaseTypedType[Int @unchecked] => btt
@@ -56,12 +101,12 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
     // These implicits have access to driver.api._ from the outer scope
 
     implicit def seekFilterT[T](implicit btt: BaseTypedType[T]): ColumnSeekFilter[T] =
-      new ColumnSeekFilter[T] {
+      new RowComparableSeekFilter[T] {
+        def valueType: TypedType[T] = btt
+
+        // Seekers bind the value and call applyParam (as compiled pages do); this is for direct calls.
         def apply(ordered: lifted.ColumnOrdered[T], value: T, prevCond: FilterCond): FilterCond =
-          ordered.ord.direction match {
-            case Ordering.Asc  => ordered.column > value || (ordered.column === value && prevCond)
-            case Ordering.Desc => ordered.column < value || (ordered.column === value && prevCond)
-          }
+          applyParam(ordered, SeekSettings.of(driver).bind(value, valueType), valueIsNull = false, prevCond)
 
         override def applyParam(
             ordered: lifted.ColumnOrdered[T],
@@ -76,36 +121,11 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
       }
 
     implicit def seekFilterOptT[T](implicit btt: BaseTypedType[T]): ColumnSeekFilter[Option[T]] =
-      new ColumnSeekFilter[Option[T]] {
-        def apply(
-            ordered: lifted.ColumnOrdered[Option[T]],
-            value: Option[T],
-            prevCond: FilterCond
-        ): FilterCond = {
-          val col = ordered.column
-          (ordered.ord.direction, ordered.ord.nulls, value) match {
-            case (Ordering.Asc, Ordering.NullsFirst, Some(v)) =>
-              (col > v) || (col === v && prevCond)
-            case (Ordering.Desc, Ordering.NullsFirst, Some(v)) =>
-              (col < v) || (col === v && prevCond)
-            case (_, Ordering.NullsFirst, None) =>
-              (col.isEmpty && prevCond) || col.isDefined
+      new NullableSeekFilter[Option[T]] {
+        def valueType: TypedType[Option[T]] = btt.optionType
 
-            case (Ordering.Asc, Ordering.NullsLast, Some(v)) =>
-              (col > v) || (col === v && prevCond) || col.isEmpty
-            case (Ordering.Desc, Ordering.NullsLast, Some(v)) =>
-              (col < v) || (col === v && prevCond) || col.isEmpty
-            case (_, Ordering.NullsLast, None) =>
-              col.isEmpty && prevCond
-
-            case (Ordering.Asc, Ordering.NullsDefault, Some(v)) =>
-              (col > v) || (col === v && prevCond) || col.isEmpty
-            case (Ordering.Desc, Ordering.NullsDefault, Some(v)) =>
-              (col < v) || (col === v && prevCond) || col.isEmpty
-            case (_, Ordering.NullsDefault, None) =>
-              col.isEmpty && prevCond
-          }
-        }
+        def apply(ordered: lifted.ColumnOrdered[Option[T]], value: Option[T], prevCond: FilterCond): FilterCond =
+          applyParam(ordered, SeekSettings.of(driver).bind(value, valueType), value.isEmpty, prevCond)
 
         override def applyParam(
             ordered: lifted.ColumnOrdered[Option[T]],
@@ -238,7 +258,7 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
     * Mix this into your profile's API object:
     * {{{
     * trait MyProfile extends PostgresProfile with SlickSeekerSupport {
-    *   object MyApi extends API with SeekImplicits
+    *   object MyApi extends JdbcAPI with SeekImplicits
     *   override val api: MyApi.type = MyApi
     * }
     * }}}
@@ -293,4 +313,27 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
 
   // Make the profile available for the page method
   implicit def jdbcProfile: JdbcProfile = driver
+}
+
+object SlickSeekerSupport {
+  private[slickseeker] def defaultRowComparisons(profile: JdbcProfile): Boolean = profile match {
+    case _: PostgresProfile | _: H2Profile => true
+    case _                                 => false
+  }
+
+  private[slickseeker] def defaultUntypedStringParams(profile: JdbcProfile): Boolean =
+    profile.isInstanceOf[PostgresProfile]
+
+  private[slickseeker] def defaultNulls(profile: JdbcProfile, direction: Ordering.Direction): Ordering.NullOrdering = {
+    val asc = direction == Ordering.Asc
+    profile match {
+      case _: HsqldbProfile => Ordering.NullsFirst
+      case _: H2Profile | _: MySQLProfile | _: SQLiteProfile | _: SQLServerProfile =>
+        if (asc) Ordering.NullsFirst else Ordering.NullsLast
+      case _ => if (asc) Ordering.NullsLast else Ordering.NullsFirst
+    }
+  }
+
+  private[slickseeker] def defaultBindCursorValues(profile: JdbcProfile): Boolean =
+    !profile.isInstanceOf[SQLServerProfile]
 }

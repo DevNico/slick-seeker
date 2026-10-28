@@ -8,8 +8,8 @@ Add to your `build.sbt`:
 
 ```scala
 libraryDependencies ++= Seq(
-  "io.github.devnico" %% "slick-seeker" % "0.4.0",
-  "io.github.devnico" %% "slick-seeker-play-json" % "0.4.0"  // Optional
+  "io.github.devnico" %% "slick-seeker" % "0.7.0",
+  "io.github.devnico" %% "slick-seeker-play-json" % "0.7.0"  // Optional
 )
 ```
 
@@ -28,7 +28,7 @@ trait MyPostgresProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
   
   override val api: MyApi.type = MyApi
 }
