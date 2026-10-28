@@ -1,10 +1,11 @@
 package io.github.devnico.slickseeker.support
 
 import io.github.devnico.slickseeker.filter.SeekerSortKey
+import io.github.devnico.slickseeker.pagination.SeekSettings
 import slick.ast.{BaseTypedType, TypedType}
 
 // Import only what we need from Slick, avoiding wildcards
-import slick.lifted.{ColumnOrdered, FlatShapeLevel, LiteralColumn, Rep, Shape}
+import slick.lifted.{ColumnOrdered, FlatShapeLevel, LiteralColumn, Query, Rep, Shape}
 
 final case class QueryWithCursor[E, U, C, CU, CVE](
     toCursor: E => C,
@@ -37,9 +38,28 @@ final case class QueryWithCursor[E, U, C, CU, CVE](
     q.map(e => (select(e), toCursor(e)))
   }
 
+  /** [[project]] with the cursor columns as `settings` select them (see [[SeekSettings.cursorColumnsAsExpressions]]).
+    */
+  private[slickseeker] def project(q: Query[E, U, Seq], settings: SeekSettings): Query[(E, C), (U, CU), Seq] =
+    if (!settings.cursorColumnsAsExpressions) project(q)
+    else copy[E, U, C, CU, CVE](toCursor = e => QueryWithCursor.asExpressions(toCursor(e))).project(q)
+
+  /** [[projectAs]] with the cursor columns as `settings` select them. */
+  private[slickseeker] def projectAs[P, PU](q: Query[E, U, Seq], settings: SeekSettings)(select: E => P)(implicit
+      pShape: Shape[FlatShapeLevel, P, PU, P]
+  ): Query[(P, C), (PU, CU), Seq] =
+    if (!settings.cursorColumnsAsExpressions) projectAs(q)(select)
+    else copy[E, U, C, CU, CVE](toCursor = e => QueryWithCursor.asExpressions(toCursor(e))).projectAs(q)(select)
 }
 
 object QueryWithCursor {
+
+  // The cursor columns `(last, (…, (first, seed)))` as expressions (SeekSettings.asExpression).
+  private def asExpressions[C](cursor: C): C = (cursor match {
+    case (head: Rep[?], tail) => (Rep.forNodeUntyped[Any](SeekSettings.asExpression(head.toNode)), asExpressions(tail))
+    case seed                 => seed
+  }).asInstanceOf[C]
+
   def seed[E, U, CVE](implicit
       shape: Shape[FlatShapeLevel, E, U, E],
       btt: BaseTypedType[Int]

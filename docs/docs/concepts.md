@@ -56,22 +56,19 @@ LIMIT 20
 Cursor values are bound as parameters of the column's type, so they compare exactly like the column's own values
 (a `REAL` column's `0.1f` equals its cursor value, which the literal `0.1` would not). Cursor value codecs should
 therefore decode the column's type; values of another type are written as literals, as in earlier versions.
-Floating-point seek columns stay fragile where the driver sends parameters as text (MariaDB, MySQL with client-side
-prepared statements); prefer `DECIMAL` columns or another seek column there.
+Floating-point seek columns stay fragile where the driver sends parameters as text (MariaDB Connector/J by default,
+see [Supported Databases](#supported-databases)); prefer `DECIMAL` columns or another seek column there.
 
-- SQL Server support is limited: a cursor value only compares like the column sorts if it has the column's exact
-  type, and neither literals nor the driver's parameters always do.
-    - Ad-hoc pages write cursor values as literals there by default (`seekerBindCursorValues = false`, as in earlier
-      versions). Slick writes strings as `'…'` (`varchar`), so `nvarchar` seek columns holding characters outside the
-      collation's code page loop; set `seekerBindCursorValues = true` for such schemas.
-    - Parameters (always used by compiled pages) are `nvarchar` strings and `datetime2` timestamps by default, which
-      skip or repeat rows on `varchar` and `datetime` seek columns. The driver properties
-      `sendStringParametersAsUnicode=false` and `datetimeParameterType=datetime` change that for the whole connection,
-      so they only help if all string seek columns are `varchar` and all timestamp seek columns `datetime` (and they
-      affect the application's other statements too).
-    - `page` / `pageWithoutCount` fail with `Ambiguous column name`, and so does a selection containing a seek column
-      (Slick selects it twice): page a selection of other columns or of expressions (e.g. `_.id + 0`) with `pageAs` /
-      `pageWithoutCountAs` or `CompiledSeekPage`.
+- On SQL Server, a cursor value only compares like its column sorts if it has the column's type, and the driver
+  binds strings as `nvarchar` and timestamps as `datetime2`. Seekers therefore cast cursor values of string
+  columns to `VARCHAR(MAX)` or `NVARCHAR(MAX)` and of `DATETIME` / `SMALLDATETIME` columns to their type, after the
+  column's declared type: its `O.SqlType`, else the type Slick's DDL gives it (`VARCHAR` for strings,
+  `DATETIME2(6)` for timestamps). Declare `O.SqlType` on seek columns whose database type differs, e.g.
+  `column[String]("name", O.SqlType("NVARCHAR(100)"))` or `column[LocalDateTime]("at", O.SqlType("DATETIME"))`.
+  An expression gets the declared type of its columns of the same type (`_.name.toLowerCase`: `name`'s). Values of
+  an expression over columns of different declared types, or of a column of a query the seeker can't follow to its
+  table, are not cast: they compare as the driver binds them (`nvarchar`, `datetime2`).
+  Override `seekerCursorValueCast` in your profile to change the casts.
 
 - On PostgreSQL, string-backed cursor values (`String` and types mapped to `String`) are bound untyped, as literals
   would be, so they compare with native enums, `uuid` and other columns mapped to `String`. Override
@@ -79,9 +76,9 @@ prepared statements); prefer `DECIMAL` columns or another seek column there.
 - With parameters, every page of a seeker has the same SQL, so the database may reuse a generic plan (PostgreSQL does
   after five executions of a server-side prepared statement). Check the plans of hot page queries;
   `plan_cache_mode = force_custom_plan` restores planning per cursor value.
-- The settings (`seekerRowComparisons`, `seekerUntypedStringParams`, `seekerBindCursorValues`, `seekerDefaultNulls`)
-  are read from the profile
-  a page runs with: the implicit profile of `page` / `pageWithoutCount`, or the profile of a `CompiledSeekPage`.
+- The settings (`seekerRowComparisons`, `seekerUntypedStringParams`, `seekerCursorValueCast`, `seekerDefaultNulls`)
+  are read from the profile a page runs with: the implicit profile of `page` / `pageWithoutCount`, or the profile of
+  a `CompiledSeekPage`.
 
 ### Row Value Comparisons
 
@@ -139,6 +136,16 @@ trait MyProfile extends H2Profile with SlickSeekerSupport {
   // H2 with DEFAULT_NULL_ORDERING=HIGH
   override def seekerDefaultNulls(direction: slick.ast.Ordering.Direction): slick.ast.Ordering.NullOrdering =
     if (direction == slick.ast.Ordering.Asc) slick.ast.Ordering.NullsLast else slick.ast.Ordering.NullsFirst
+  // …
+}
+```
+
+For CockroachDB (which uses `PostgresProfile`), the reverse:
+
+```scala
+trait MyCockroachProfile extends PostgresProfile with SlickSeekerSupport {
+  override def seekerDefaultNulls(direction: slick.ast.Ordering.Direction): slick.ast.Ordering.NullOrdering =
+    if (direction == slick.ast.Ordering.Asc) slick.ast.Ordering.NullsFirst else slick.ast.Ordering.NullsLast
   // …
 }
 ```
@@ -236,6 +243,41 @@ ORDER BY
     WHEN status = 'Archived' THEN 3
   END ASC
 ```
+
+## Supported Databases
+
+CI tests against these databases: many seeker configurations paged forward and backward, ad-hoc and compiled, must
+return each row exactly once in the database's own order.
+
+| Database | Tested with | Profile | Notes |
+|---|---|---|---|
+| PostgreSQL | 16 | `PostgresProfile` | Row value comparisons; untyped string parameters (enums, `uuid`) |
+| H2 | 2.4 | `H2Profile` | Row value comparisons |
+| HSQLDB | 2.7 | `HsqldbProfile` | |
+| SQLite | 3.53 | `SQLiteProfile` | |
+| Derby | 10.17 | `DerbyProfile` | |
+| MySQL | 8.4 (Connector/J 9) | `MySQLProfile` | |
+| MariaDB | 11.4 (MariaDB Connector/J 3.5) | `MySQLProfile` | See floating-point columns below |
+| SQL Server | 2022 (mssql-jdbc 13) | `SQLServerProfile` | Declare `O.SqlType` where it differs from Slick's ([casts](#cursor-values-as-parameters)) |
+| Oracle | 23 (Free) | `OracleProfile` | |
+| CockroachDB | 25.4 | `PostgresProfile` | Needs the [nulls override](#null-handling) |
+
+`sbt test` covers H2, HSQLDB and SQLite; the others run in containers (Docker) when selected, e.g. one at a time:
+`SEEKER_DATABASES=sqlserver sbt "core/testOnly io.github.devnico.slickseeker.databases.*"` (ids: `derby`,
+`postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `cockroachdb`, or `all`).
+
+Known limitations:
+
+- **MariaDB, floating-point seek columns**: MariaDB Connector/J sends parameters as text by default, so a cursor
+  value `0.1` never equals the `REAL` value `0.1f` it came from and pages repeat. Connect with
+  `useServerPrepStmts=true`, or seek on `DECIMAL` columns. MySQL with Connector/J pages them correctly.
+- **SQL Server, `sendStringParametersAsUnicode=false`**: `varchar` and `datetime` columns still page correctly, but
+  `nvarchar` values outside the database's code page are lost before any cast: keep the default (`true`). The same
+  goes for a `varchar` column whose collation has another code page than the database default.
+  `datetimeParameterType=datetime` loses `datetime2` precision the same way.
+- **SQL Server, `text` / `ntext`** columns can't be sorted, so they can't be seek columns.
+- **MySQL / MariaDB, row value comparisons** are off: they don't use an index range for them (see
+  [Row Value Comparisons](#row-value-comparisons)).
 
 ## Pagination Without Count
 

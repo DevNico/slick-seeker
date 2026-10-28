@@ -73,9 +73,12 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
     }
   }
 
-  /** Built-in filters get the cursor value bound as `settings` say; custom ones get the value. */
+  /** Built-in filters get the cursor value bound as `settings` say; custom ones get the value. `table` is an element of
+    * the seeker's query `base`.
+    */
   def appendToFilter(
       table: E,
+      base: Node,
       cursor: CVE,
       prevCond: FilterCond,
       settings: SeekSettings
@@ -86,10 +89,22 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         val columnOrdered = this.col(table)
         filter match {
           case builtIn: BuiltInSeekFilter[Column @unchecked] =>
-            builtIn.applyParam(columnOrdered, settings.bind(value, builtIn.valueType), value == None, prevCond)
+            val bound = comparable(table, base, settings.bind(value, builtIn.valueType), builtIn.valueType, settings)
+            builtIn.applyParam(columnOrdered, bound, value == None, prevCond)
           case custom => custom(columnOrdered, value, prevCond)
         }
       }
+
+  /** `value`, a cursor value of `tpe` bound for this column of `table`, as it compares with the column's values (see
+    * [[SeekSettings.compareAs]]).
+    */
+  def comparable(table: E, base: Node, value: Rep[?], tpe: TypedType[?], settings: SeekSettings): Rep[Column] =
+    settings.compareAs(
+      col(table).column.toNode,
+      base,
+      value.asInstanceOf[Rep[Column]],
+      tpe.asInstanceOf[TypedType[Column]]
+    )
 
   /** This column with a missing nulls ordering resolved to the database's default where its filter needs one (see
     * [[NullableSeekFilter]]); applied before [[reversed]], which mirrors it.
@@ -120,15 +135,24 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
   def nonNull: Boolean = rowComparable
 
   /** The decoded cursor value as a parameter of a row value comparison, if this column can be part of one. */
-  def rowValue(cursor: CVE, settings: SeekSettings): Option[Node] = filter match {
+  def rowValue(table: E, base: Node, cursor: CVE, settings: SeekSettings): Option[Node] = filter match {
     case f: RowComparableSeekFilter[Column @unchecked] =>
-      codec.decode(cursor).map(settings.bind(_, f.valueType).toNode)
+      codec.decode(cursor).map(v =>
+        comparable(table, base, settings.bind(v, f.valueType), f.valueType, settings).toNode
+      )
     case _ => None
   }
 
   /** Like [[appendToFilter]], with the cursor value bound as a query parameter of this column's type. */
-  def appendToFilterParam(table: E, value: Rep[?], valueIsNull: Boolean, prevCond: FilterCond): FilterCond =
-    filter.applyParam(this.col(table), value.asInstanceOf[Rep[Column]], valueIsNull, prevCond)
+  def appendToFilterParam(
+      table: E,
+      base: Node,
+      value: Rep[?],
+      valueIsNull: Boolean,
+      prevCond: FilterCond,
+      settings: SeekSettings
+  ): FilterCond =
+    filter.applyParam(this.col(table), comparable(table, base, value, typedType(), settings), valueIsNull, prevCond)
 }
 
 private[slickseeker] object SeekColumn {

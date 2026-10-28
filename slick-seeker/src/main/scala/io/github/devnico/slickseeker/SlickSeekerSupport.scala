@@ -84,12 +84,15 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
   def seekerDefaultNulls(direction: Ordering.Direction): Ordering.NullOrdering =
     SlickSeekerSupport.defaultNulls(driver, direction)
 
-  /** Whether ad-hoc pages bind cursor values as parameters of the column's type (compiled pages always do) rather than
-    * writing them as SQL literals. On by default, except for SQL Server: its driver binds strings as `nvarchar` and
-    * timestamps as `datetime2` by default, which compare differently with `varchar` and `datetime` columns than the
-    * columns sort.
+  /** The SQL type seekers cast a cursor value to, given its seek column's declared type (`O.SqlType`, else the type
+    * Slick's DDL gives the column; for expressions, that of the first column of the same type in them, else the default
+    * type of their Scala type), or `None` to compare the parameter as bound. On SQL Server, string values are cast to
+    * `VARCHAR(MAX)` or `NVARCHAR(MAX)` and timestamps of `DATETIME` and `SMALLDATETIME` columns to their type, since
+    * its driver binds strings as `nvarchar` and timestamps as `datetime2`, which compare differently with these columns
+    * than they sort. `None` elsewhere.
     */
-  def seekerBindCursorValues: Boolean = SlickSeekerSupport.defaultBindCursorValues(driver)
+  def seekerCursorValueCast(sqlType: String): Option[String] =
+    SlickSeekerSupport.defaultCursorValueCast(driver, sqlType)
 
   // Helper to get BaseTypedType[Int]
   protected def intBaseType: BaseTypedType[Int] = ScalaBaseType.intType match {
@@ -334,6 +337,19 @@ object SlickSeekerSupport {
     }
   }
 
-  private[slickseeker] def defaultBindCursorValues(profile: JdbcProfile): Boolean =
-    !profile.isInstanceOf[SQLServerProfile]
+  private val sqlServerNationalString = "(?i)\\s*(nvarchar|nchar|national\\b).*".r
+  private val sqlServerString         = "(?i)\\s*(varchar|char|character)\\b.*".r
+  private val sqlServerDatetime       = "(?i)\\s*(datetime|smalldatetime)\\b.*".r
+
+  private[slickseeker] def defaultCursorValueCast(profile: JdbcProfile, sqlType: String): Option[String] =
+    profile match {
+      case _: SQLServerProfile =>
+        sqlType match {
+          case sqlServerNationalString(_) => Some("NVARCHAR(MAX)")
+          case sqlServerString(_)         => Some("VARCHAR(MAX)")
+          case sqlServerDatetime(tpe)     => Some(tpe.toUpperCase)
+          case _                          => None
+        }
+      case _ => None
+    }
 }

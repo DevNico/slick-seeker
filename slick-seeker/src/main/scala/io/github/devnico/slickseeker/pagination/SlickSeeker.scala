@@ -86,8 +86,9 @@ final case class SlickSeeker[E, U, CVE, C, CU](
   ): profile.api.DBIOAction[PaginatedResultWithoutCount[U], profile.api.NoStream, profile.api.Effect.Read] = {
     val theApi = profile.api
     import theApi._
-    pageRows[U](limit, cursor, maxLimit, SeekSettings.of(profile))(limited =>
-      streamableQueryActionExtensionMethods(qwc.project(limited)).result
+    val settings = SeekSettings.of(profile)
+    pageRows[U](limit, cursor, maxLimit, settings)(limited =>
+      streamableQueryActionExtensionMethods(qwc.project(limited, settings)).result
     )
   }
 
@@ -127,8 +128,9 @@ final case class SlickSeeker[E, U, CVE, C, CU](
   ): profile.api.DBIOAction[PaginatedResultWithoutCount[PU], profile.api.NoStream, profile.api.Effect.Read] = {
     val theApi = profile.api
     import theApi._
-    pageRows[PU](limit, cursor, maxLimit, SeekSettings.of(profile))(limited =>
-      streamableQueryActionExtensionMethods(qwc.projectAs(limited)(select)).result
+    val settings = SeekSettings.of(profile)
+    pageRows[PU](limit, cursor, maxLimit, settings)(limited =>
+      streamableQueryActionExtensionMethods(qwc.projectAs(limited, settings)(select)).result
     )
   }
 
@@ -198,19 +200,23 @@ final case class SlickSeeker[E, U, CVE, C, CU](
           reps.size == queryColumns.size && nullFlags.size == queryColumns.size,
           s"${reps.size} cursor parameters and ${nullFlags.size} null flags for ${queryColumns.size} seek columns"
         )
+        val base = baseQuery.toNode
         baseQuery.filter { table =>
-          rowFilter(table, queryColumns, reps.map(_.toNode), settings).getOrElse {
+          val values = reps.zip(queryColumns).map { case (rep, column) =>
+            column.comparable(table, base, rep, column.typedType(), settings).toNode
+          }
+          rowFilter(table, queryColumns, values, settings).getOrElse {
             reps
               .zip(nullFlags)
               .zip(queryColumns)
               .reverse
               .foldLeft[FilterCond](alwaysFalse) { case (prevCond, ((rep, isNull), column)) =>
-                column.appendToFilterParam(table, rep, isNull, prevCond)
+                column.appendToFilterParam(table, base, rep, isNull, prevCond, settings)
               }
           }
         }
     }
-    qwc.projectAs(filtered.sortBy(buildOrdered(_, queryColumns)).take(limit))(select)
+    qwc.projectAs(filtered.sortBy(buildOrdered(_, queryColumns)).take(limit), settings)(select)
   }
 
   private def buildFilter(
@@ -221,7 +227,11 @@ final case class SlickSeeker[E, U, CVE, C, CU](
   ): FilterCond =
     cursorValues
       .filter(values => settings.rowComparisons && values.size == columns.size)
-      .flatMap(values => sequence(columns.zip(values).map { case (column, value) => column.rowValue(value, settings) }))
+      .flatMap(values =>
+        sequence(columns.zip(values).map { case (column, value) =>
+          column.rowValue(table, baseQuery.toNode, value, settings)
+        })
+      )
       .flatMap(rowFilter(table, columns, _, settings))
       .getOrElse(buildChainFilter(table, columns, cursorValues, settings))
 
@@ -255,7 +265,7 @@ final case class SlickSeeker[E, U, CVE, C, CU](
       alwaysTrue
     } else {
       val filter = zipped.foldLeft[Option[FilterCond]](Some(alwaysFalse)) { case (prevCond, (cursorValue, column)) =>
-        prevCond.flatMap(column.appendToFilter(table, cursorValue, _, settings))
+        prevCond.flatMap(column.appendToFilter(table, baseQuery.toNode, cursorValue, _, settings))
       }
       filter.getOrElse(alwaysTrue)
     }
