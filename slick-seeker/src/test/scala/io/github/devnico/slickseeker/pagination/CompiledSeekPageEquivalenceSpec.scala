@@ -1,7 +1,7 @@
 package io.github.devnico.slickseeker.pagination
 
 import io.github.devnico.slickseeker.cursor._
-import io.github.devnico.slickseeker.filter.{ColumnSeekFilter, SeekOrder, SeekerSortKey}
+import io.github.devnico.slickseeker.filter.{ColumnSeekFilter, ColumnSeekFilterTypes, SeekOrder, SeekerSortKey}
 import io.github.devnico.slickseeker.support.{ChainH2Profile, MyH2Profile, SortDirection}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers
@@ -204,16 +204,37 @@ class CompiledSeekPageEquivalenceSpec extends AnyWordSpec with Matchers with Bef
       pages.distinct shouldBe Seq(await(db.run(adHoc(config, 0).pageWithoutCountAs(2, first.nextCursor)(_.id))))
     }
 
-    "fail on creation for a sort key without typedType" in {
+    "page custom sort keys and filters that can't bind cursor values like the ad-hoc seeker" in {
       val base = MyH2Profile.api.seekerSortKeyIdentity[Int, String]
-      val withoutType: SeekerSortKey[Int, Int, String] = new SeekerSortKey[Int, Int, String] {
+      // Neither typedType nor applyParam, as custom ones written before 0.7.0
+      val customFilter: ColumnSeekFilter[Int] = new ColumnSeekFilter[Int] {
+        def apply(column: slick.lifted.ColumnOrdered[Int], value: Int, prevCond: ColumnSeekFilterTypes.FilterCond) =
+          base.filter(column, value, prevCond)
+      }
+      val custom: SeekerSortKey[Int, Int, String] = new SeekerSortKey[Int, Int, String] {
         def mapCol(col: slick.lifted.ColumnOrdered[Int]) = base.mapCol(col)
         def shape                                        = base.shape
-        def filter: ColumnSeekFilter[Int]                = base.filter
+        def filter: ColumnSeekFilter[Int]                = customFilter
         def codec: CursorValueCodec[Int, String]         = base.codec
       }
-      an[UnsupportedOperationException] should be thrownBy
-        CompiledSeekPage[Unit]((_: Unit) => rows.toSeeker.seek(_.id.asc)(withoutType))(_.id)
+      val seeker =
+        (minId: Rep[Int]) => rows.filter(_.id >= minId).toSeeker.seek(_.tag.asc.nullsLast).seek(_.id.asc)(custom)
+      val page = CompiledSeekPage[Int]((minId: ConstColumn[Int]) => seeker(minId))(_.id)
+      page.maxForms shouldBe 1
+
+      @tailrec def walk(
+          cursor: Option[String],
+          pages: Vector[PaginatedResultWithoutCount[Int]]
+      ): Vector[PaginatedResultWithoutCount[Int]] = {
+        val compiled = await(db.run(page.pageWithoutCount(2, 3, cursor)))
+        compiled shouldBe await(db.run(seeker(2).pageWithoutCountAs(3, cursor)(_.id)))
+        if (compiled.nextCursor.isEmpty) pages :+ compiled else walk(compiled.nextCursor, pages :+ compiled)
+      }
+      val pages = walk(None, Vector.empty)
+      pages.flatMap(_.items).sorted shouldBe data.map(_.id).filter(_ >= 2).sorted
+      await(db.run(page.pageWithoutCount(2, 3, pages.last.prevCursor))) shouldBe
+        await(db.run(seeker(2).pageWithoutCountAs(3, pages.last.prevCursor)(_.id)))
+      await(db.run(page.page(2, 3, None))).total shouldBe data.count(_.id >= 2)
     }
 
     "reject a seeker without seek columns" in {

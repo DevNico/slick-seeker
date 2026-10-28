@@ -11,7 +11,10 @@ trait ColumnSeekFilter[T] {
   import ColumnSeekFilterTypes._
   def apply(column: ColumnOrdered[T], value: T, prevCond: FilterCond): FilterCond
 
-  /** Like [[apply]], with the cursor value bound as a query parameter; `valueIsNull` tells whether it is `None`. */
+  /** Like [[apply]], with the cursor value bound as a query parameter; `valueIsNull` tells whether it is `None`.
+    * Optional: without it, compiled pages ([[io.github.devnico.slickseeker.pagination.CompiledSeekPage]]) run their
+    * cursor pages as ad-hoc pages.
+    */
   def applyParam(column: ColumnOrdered[T], value: Rep[T], valueIsNull: Boolean, prevCond: FilterCond): FilterCond =
     throw new UnsupportedOperationException(s"${getClass.getName} does not support compiled pages (no applyParam)")
 }

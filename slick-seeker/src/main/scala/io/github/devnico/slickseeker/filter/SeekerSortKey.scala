@@ -10,7 +10,9 @@ trait SeekerSortKey[T, K, CVE] {
   def filter: ColumnSeekFilter[K]
   def codec: CursorValueCodec[K, CVE]
 
-  /** The type of the sort key, needed to bind cursor values as query parameters ([[pagination.CompiledSeekPage]]). */
+  /** The type of the sort key, to bind cursor values as query parameters ([[pagination.CompiledSeekPage]]). Optional:
+    * without it, compiled pages run their cursor pages as ad-hoc pages.
+    */
   def typedType: TypedType[K] =
     throw new UnsupportedOperationException(s"${getClass.getName} does not support compiled pages (no typedType)")
 }

@@ -328,9 +328,9 @@ byMinAge.pageWithoutCount(params = 30, limit = 20, cursor = None)   // or .page(
   including row value comparisons. A cursor that can't be decoded at all fails like it does for the ad-hoc seeker;
   one whose values don't decode or don't fit the cursor columns gives the first page (the ad-hoc seeker then pages
   without a cursor filter, or with one on the leading columns if there are fewer values than columns).
-- Cursor value codecs must decode values of the column's type (checked per page). Custom `SeekerSortKey`s and
-  `ColumnSeekFilter`s need `typedType` and `applyParam` (the built-in ones have them); a missing one fails when the
-  `CompiledSeekPage` is created.
+- Cursor pages bind cursor values as parameters. Where they can't, they run as ad-hoc pages (same items and cursors,
+  compiled per page): for custom `SeekerSortKey`s without `typedType` or `ColumnSeekFilter`s without `applyParam`,
+  and for cursor values a codec decoded as another type than the column's.
 - Generic plans: see [Cursor Values as Parameters](#cursor-values-as-parameters).
 - The seeker needs at least one seek column.
 - `SlickPgTupleSeeker` is not supported; `toSeeker` seekers use the same row value comparisons where they qualify.
