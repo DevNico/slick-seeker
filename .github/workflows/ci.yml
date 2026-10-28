@@ -54,6 +54,35 @@ jobs:
       - name: Check binary compatibility
         run: sbt ++${{ matrix.scala }} mimaReportBinaryIssues
 
+  databases:
+    name: Database (${{ matrix.database }})
+    runs-on: ubuntu-latest
+
+    # The default test job runs H2, HSQLDB and SQLite; these need Docker (Testcontainers) or Java 21 (Derby).
+    # A selected database that can't start fails the job.
+    strategy:
+      matrix:
+        database: [derby, postgresql, mysql, mariadb, sqlserver, oracle, cockroachdb]
+      fail-fast: false
+
+    env:
+      SEEKER_DATABASES: ${{ matrix.database }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: coursier/cache-action@v6
+
+      - uses: coursier/setup-action@v1
+        with:
+          jvm: temurin:21
+          apps: sbt
+
+      - name: Run database tests
+        run: >-
+          sbt ++3.3.5 "core/testOnly io.github.devnico.slickseeker.databases.*
+          io.github.devnico.slickseeker.pagination.PostgreSqlSpec"
+
   docs:
     name: Check Documentation
     runs-on: ubuntu-latest
