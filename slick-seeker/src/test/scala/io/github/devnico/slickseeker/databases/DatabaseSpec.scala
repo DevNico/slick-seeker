@@ -2,7 +2,6 @@ package io.github.devnico.slickseeker.databases
 
 import io.github.devnico.slickseeker.pagination.PaginatedResultWithoutCount
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.exceptions.TestFailedException
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import slick.dbio.DBIO
@@ -99,6 +98,40 @@ abstract class DatabaseSpec(
     }
   }
 
+  /** The first run of `seekCase` on `on` (with any limit, forward or backward) whose items are `wrong` given the
+    * expected ones, as its description and items. Errors (e.g. of the setup) fail instead of counting as wrong items.
+    */
+  def firstWrongRun(seekCase: SeekCase, on: => Database = db)(
+      wrong: (Seq[Int], Seq[Int]) => Boolean
+  ): Option[(String, Seq[Int])] = {
+    val target   = on
+    val expected = await(target.run(seekCase.expected))
+    expected.sorted shouldBe seekCase.ids.sorted
+    val walks = for {
+      limit          <- limits.iterator
+      (runName, run) <- seekCase.runs.iterator
+    } yield {
+      val (forward, backward) = await(target.run(walk(run, limit).withPinnedSession))
+      Seq(
+        s"$runName, limit $limit, forward"  -> forward.flatMap(_.items),
+        s"$runName, limit $limit, backward" -> backward.reverse.flatMap(_.items)
+      )
+    }
+    walks.flatten.find { case (_, items) => wrong(expected, items) }
+  }
+
+  /** Checks that `seekCase` skips or repeats rows on `on`: some run's pages miss rows of the case or return some more
+    * than once, and return no others.
+    */
+  def checkSkipsOrRepeats(seekCase: SeekCase, on: => Database = db): Unit =
+    firstWrongRun(seekCase, on)((expected, items) => items.sorted != expected.sorted) match {
+      case None => fail(s"${seekCase.name}: every run returned every row once")
+      case Some((runName, items)) =>
+        withClue(s"$runName: ") {
+          items.toSet.subsetOf(seekCase.ids.toSet) shouldBe true
+        }
+    }
+
   if (database.selected) {
     s"Seekers on ${database.name}" should {
       schemaList.foreach { schema =>
@@ -106,9 +139,7 @@ abstract class DatabaseSpec(
           database.limitations.get(seekCase.name) match {
             case None => s"page every row once in the database's order: ${seekCase.name}" in checkCase(seekCase)
             case Some(reason) =>
-              s"fail as documented ($reason): ${seekCase.name}" in {
-                a[TestFailedException] should be thrownBy checkCase(seekCase)
-              }
+              s"skip or repeat rows as documented ($reason): ${seekCase.name}" in checkSkipsOrRepeats(seekCase)
           }
         }
       }
@@ -139,9 +170,8 @@ class CockroachDbDatabaseSpec extends DatabaseSpec(TestDatabase.CockroachDb) {
       "need the documented nulls override: PostgreSQL's defaults put null rows elsewhere than it sorts them" in {
         // The suite's tables, paged with PostgresProfile's defaults (nulls last ascending)
         val postgres = new MatrixSchema(TestDatabase.CockroachDb, MatrixProfile.PostgreSql)
-        a[TestFailedException] should be thrownBy checkCase(
-          postgres.cases.find(_.name == "tag (default nulls), id").get
-        )
+        val tagCase  = postgres.cases.find(_.name == "tag (default nulls), id").get
+        firstWrongRun(tagCase)((expected, items) => items != expected) shouldBe defined
       }
     }
   }
