@@ -12,12 +12,15 @@ import slick.ast.{
   Library,
   LiteralNode,
   Node,
+  OptionApply,
   OptionTypedType,
   Ordering,
   ProductNode,
   Pure,
+  Ref,
   Select,
   StructNode,
+  TableExpansion,
   TableNode,
   TypeMapping,
   TypedType,
@@ -59,8 +62,9 @@ final private[slickseeker] case class SeekSettings(
       .flatMap(cursorValueCast)
       .fold(value)(sqlType => Rep.forNode[T](Library.Cast.typed(tpe, value.toNode, LiteralNode(sqlType)))(tpe))
 
-  /** Whether cursor columns are selected as expressions rather than as columns: SQL Server resolves `order by "id"`
-    * against the selected columns, and fails if a seek column is selected twice (in the item and the cursor).
+  /** Whether cursor columns, and columns the items select more than once, are selected as expressions rather than as
+    * columns: SQL Server resolves `order by "id"` against the selected columns, and fails if a column is selected twice
+    * (in the item and the cursor, or twice in the item).
     */
   def cursorColumnsAsExpressions: Boolean = profile.isInstanceOf[SQLServerProfile]
 
@@ -167,6 +171,51 @@ private[slickseeker] object SeekSettings {
     case s: StructNode  => s.elements.toSeq.lift(idx - 1).map(_._2)
     case t: TypeMapping => child(t.child, idx)
     case _              => None
+  }
+
+  /** `value` (what a query over the elements of `from` selects) with the columns it selects under a name it selects
+    * more than once (e.g. `(t.id, t.id)`, or `t.id` beside the whole row `t`) as expressions, so that no two selected
+    * columns have the same name. Whole rows are counted, but stay as they are.
+    */
+  def withoutRepeatedColumns(value: Node, from: Node): Node = {
+    val counts   = columnNames(value, from).groupBy(identity).map { case (name, all) => (name, all.size) }
+    val repeated = counts.filter(_._2 > 1).keySet
+    def distinct(n: Node): Node = n match {
+      case select: Select =>
+        if (column(select, from).exists(repeated)) asExpression(select) else select
+      case _: ProductNode | _: StructNode | _: TypeMapping | _: OptionApply => n.mapChildren(distinct)
+      case other                                                            => other
+    }
+    if (repeated.isEmpty) value else distinct(value)
+  }
+
+  // The name of the column `n` (a path into the elements of `scope`) selects, if it selects one column.
+  private def column(n: Node, scope: Node): Option[String] = n match {
+    case Select(_, f: FieldSymbol) => Some(f.name)
+    case path @ Select(_, _: ElementSymbol) =>
+      element(scope, elementPath(path)).flatMap { case (e, s) => column(e, s) }
+    case OptionApply(child) => column(child, scope)
+    case _                  => None
+  }
+
+  // The names of the columns `n` (part of what a query over the elements of `scope` selects) selects as columns.
+  private def columnNames(n: Node, scope: Node): List[String] = n match {
+    case _: Select | _: OptionApply if column(n, scope).isDefined => column(n, scope).toList
+    case path @ Select(_, _: ElementSymbol) =>
+      element(scope, elementPath(path)).fold(List.empty[String]) { case (e, s) => columnNames(e, s) }
+    case _: Ref => rowColumnNames(scope)
+    case _: ProductNode | _: StructNode | _: TypeMapping | _: OptionApply =>
+      n.children.toSeq.toList.flatMap(columnNames(_, scope))
+    case _ => Nil
+  }
+
+  // The names of the columns of a whole element of the query `scope`.
+  private def rowColumnNames(scope: Node): List[String] = scope match {
+    case TableExpansion(_, _, columns) => columnNames(columns, scope)
+    case filtered: FilteredQuery       => rowColumnNames(filtered.from)
+    case Bind(_, from, Pure(value, _)) => columnNames(value, from)
+    case join: Join                    => rowColumnNames(join.left) ++ rowColumnNames(join.right)
+    case _                             => Nil
   }
 
   /** `column` as an expression that is not a column reference, with the same value and type. */

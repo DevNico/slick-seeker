@@ -142,6 +142,30 @@ class SqlRenderingSpec extends AnyWordSpec with Matchers with SlickEquals {
       select(PostgresProfile) should startWith("""select "id", "id", "name"""")
     }
 
+    "select columns the items select more than once as expressions on SQL Server only" in {
+      def select[P, PU](profile: JdbcProfile)(p: Items => P)(implicit shape: Shape[FlatShapeLevel, P, PU, P]) =
+        profile.api
+          .streamableQueryActionExtensionMethods(byNameId.qwc.projectAs(items, SeekSettings.of(profile))(p))
+          .result
+          .statements
+          .head
+      val id = """(case when (1 = 1) then "id" else "id" end)"""
+      select(SQLServerProfile)(t => (t.id, t.name, t.id)) should startWith(s"""select $id, "name", $id, $id""")
+      select(SQLServerProfile)(t => (t.id.?, t.id)) should startWith(s"""select $id, $id, $id""")
+      // The whole row keeps its columns; the repeated one beside it is an expression
+      select(SQLServerProfile)(t => (t, t.id)) should startWith(s"""select "id", "name", "tag", "uname", "at", $id""")
+      // Mapped elements repeating a column
+      val mapped = items.map(t => (t.id, t.name, t.id)).toSeeker.seek(_._2.asc).seek(_._1.asc)
+      SQLServerProfile.api
+        .streamableQueryActionExtensionMethods(mapped.qwc.project(mapped.baseQuery, SeekSettings.of(SQLServerProfile)))
+        .result
+        .statements
+        .head should startWith(
+        s"""select $id, "name", $id"""
+      )
+      select(PostgresProfile)(t => (t.id, t.name, t.id)) should startWith("""select "id", "name", "id"""")
+    }
+
     "give non-null columns no nulls clause, so no database emulates one on backward pages" in {
       val backward = Seq(MySQLProfile, SQLServerProfile, SQLiteProfile, PostgresProfile, HsqldbProfile)
         .map(profile => profile.toString -> sql(byNameId, profile, Seq("n1", "5"), CursorDirection.Backward))

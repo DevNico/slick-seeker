@@ -2,10 +2,10 @@ package io.github.devnico.slickseeker.support
 
 import io.github.devnico.slickseeker.filter.SeekerSortKey
 import io.github.devnico.slickseeker.pagination.SeekSettings
-import slick.ast.{BaseTypedType, TypedType}
+import slick.ast.{BaseTypedType, Bind, Pure, TypedType}
 
 // Import only what we need from Slick, avoiding wildcards
-import slick.lifted.{ColumnOrdered, FlatShapeLevel, LiteralColumn, Query, Rep, Shape}
+import slick.lifted.{ColumnOrdered, FlatShapeLevel, LiteralColumn, Query, Rep, Shape, WrappingQuery}
 
 final case class QueryWithCursor[E, U, C, CU, CVE](
     toCursor: E => C,
@@ -42,14 +42,20 @@ final case class QueryWithCursor[E, U, C, CU, CVE](
     */
   private[slickseeker] def project(q: Query[E, U, Seq], settings: SeekSettings): Query[(E, C), (U, CU), Seq] =
     if (!settings.cursorColumnsAsExpressions) project(q)
-    else copy[E, U, C, CU, CVE](toCursor = e => QueryWithCursor.asExpressions(toCursor(e))).project(q)
+    else
+      QueryWithCursor.withoutRepeatedColumns(
+        copy[E, U, C, CU, CVE](toCursor = e => QueryWithCursor.asExpressions(toCursor(e))).project(q)
+      )
 
   /** [[projectAs]] with the cursor columns as `settings` select them. */
   private[slickseeker] def projectAs[P, PU](q: Query[E, U, Seq], settings: SeekSettings)(select: E => P)(implicit
       pShape: Shape[FlatShapeLevel, P, PU, P]
   ): Query[(P, C), (PU, CU), Seq] =
     if (!settings.cursorColumnsAsExpressions) projectAs(q)(select)
-    else copy[E, U, C, CU, CVE](toCursor = e => QueryWithCursor.asExpressions(toCursor(e))).projectAs(q)(select)
+    else
+      QueryWithCursor.withoutRepeatedColumns(
+        copy[E, U, C, CU, CVE](toCursor = e => QueryWithCursor.asExpressions(toCursor(e))).projectAs(q)(select)
+      )
 }
 
 object QueryWithCursor {
@@ -59,6 +65,15 @@ object QueryWithCursor {
     case (head: Rep[?], tail) => (Rep.forNodeUntyped[Any](SeekSettings.asExpression(head.toNode)), asExpressions(tail))
     case seed                 => seed
   }).asInstanceOf[C]
+
+  // `mapped` (a query's map) with columns it selects more than once as expressions (SeekSettings.withoutRepeatedColumns).
+  private def withoutRepeatedColumns[T, TU](mapped: Query[T, TU, Seq]): Query[T, TU, Seq] = mapped.toNode match {
+    case Bind(generator, from, Pure(value, identity)) =>
+      val distinct = SeekSettings.withoutRepeatedColumns(value, from)
+      if (distinct eq value) mapped
+      else new WrappingQuery[T, TU, Seq](Bind(generator, from, Pure(distinct, identity)), mapped.shaped)
+    case _ => mapped
+  }
 
   def seed[E, U, CVE](implicit
       shape: Shape[FlatShapeLevel, E, U, E],
