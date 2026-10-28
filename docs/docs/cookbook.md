@@ -356,7 +356,7 @@ trait MyPostgresProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
   override val api: MyApi.type = MyApi
 }
 
@@ -590,7 +590,7 @@ trait MyProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits {
     override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
       CursorEnvironment(jsonCursorCodec, IdentityDecorator())
   }
@@ -634,7 +634,7 @@ trait MyProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits {
     override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
       CursorEnvironment(jsonCursorCodec, Base64Decorator(GzipDecorator()))
   }
@@ -684,7 +684,7 @@ trait MyProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits {
     override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
       CursorEnvironment(jsonCursorCodec, Base64Decorator(HMACDecorator("your-secret-key")))
   }
@@ -736,7 +736,7 @@ trait MyProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits {
     override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
       CursorEnvironment(jsonCursorCodec, Base64Decorator(AESDecorator("my-secret-key-16")))
   }

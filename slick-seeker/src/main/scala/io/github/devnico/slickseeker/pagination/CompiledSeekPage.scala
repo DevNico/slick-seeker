@@ -142,7 +142,7 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
   ): dbio.DBIOAction[PaginatedResultWithoutCount[PU], dbio.NoStream, dbio.Effect.Read] = {
     import profile.api._
 
-    val normalizedLimit = limit.max(1).min(maxLimit)
+    val normalizedLimit = SlickSeeker.normalizeLimit(limit, maxLimit)
     val fetchLimit      = normalizedLimit.toLong + 1
     val decoded = cursorEnvironment
       .decodeWithDirectionOrThrow(cursor)

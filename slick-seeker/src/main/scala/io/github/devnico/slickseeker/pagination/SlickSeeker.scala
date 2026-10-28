@@ -144,7 +144,7 @@ final case class SlickSeeker[E, U, CVE, C, CU](
       ec: ExecutionContext
   ): dbio.DBIOAction[PaginatedResultWithoutCount[I], dbio.NoStream, dbio.Effect.Read] = {
     val decodedCursor   = cursorEnvironment.decodeWithDirectionOrThrow(cursor)
-    val normalizedLimit = limit.max(1).min(maxLimit)
+    val normalizedLimit = SlickSeeker.normalizeLimit(limit, maxLimit)
 
     run(pageQuery(decodedCursor, normalizedLimit, settings)).map(results =>
       cursorSupport.toPage(
@@ -164,8 +164,7 @@ final case class SlickSeeker[E, U, CVE, C, CU](
   ): lifted.Query[E, U, Seq] = {
     val queryColumns = columnsFor(decodedCursor.exists(_._1 == CursorDirection.Backward), settings)
     val filtered     = baseQuery.filter(buildFilter(_, queryColumns, decodedCursor.map(_._2), settings))
-    // Long: normalizedLimit + 1 overflows for a maxLimit of Int.MaxValue
-    filtered.sortBy(buildOrdered(_, queryColumns)).take(normalizedLimit.toLong + 1)
+    filtered.sortBy(buildOrdered(_, queryColumns)).take(normalizedLimit + 1)
   }
 
   /** The seek columns of a page in its direction, with default nulls resolved for `settings`' database. */
@@ -276,6 +275,10 @@ object SlickSeeker {
     case (head: lifted.Rep[?], tail) => flattenParams(tail, head :: acc)
     case _                           => acc
   }
+
+  /** `limit` within 1 and `maxLimit`, and below Int.MaxValue so that the fetched `limit + 1` fits an Int. */
+  private[slickseeker] def normalizeLimit(limit: Int, maxLimit: Int): Int =
+    limit.max(1).min(maxLimit).min(Int.MaxValue - 1)
 
   private def sequence[T](options: Seq[Option[T]]): Option[Seq[T]] =
     if (options.forall(_.isDefined)) Some(options.flatten) else None

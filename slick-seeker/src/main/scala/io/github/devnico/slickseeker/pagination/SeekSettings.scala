@@ -10,24 +10,26 @@ final private[slickseeker] case class SeekSettings(
     profile: JdbcProfile,
     rowComparisons: Boolean,
     untypedStringParams: Boolean,
-    nullsSortHigh: Boolean
+    bindCursorValues: Boolean,
+    ascNulls: Ordering.NullOrdering,
+    descNulls: Ordering.NullOrdering
 ) {
 
   /** The type cursor values of `tpe` are bound with. */
   def paramType(tpe: TypedType[Any]): TypedType[Any] =
     if (untypedStringParams) UntypedStringParam(profile)(tpe) else tpe
 
-  /** The cursor value as a parameter of `tpe`, not a literal: a literal can compare unequal to the column's value (e.g.
-    * `0.1` to a REAL 0.1f on PostgreSQL). Values of another type (from codecs that don't decode the column's type) are
-    * written as literals, as before parameters.
+  /** The cursor value of an ad-hoc page as a parameter of `tpe`, not a literal: a literal can compare unequal to the
+    * column's value (e.g. `0.1` to a REAL 0.1f on PostgreSQL). Written as a literal, as before parameters, if the
+    * profile says so or the value has another type (from codecs that don't decode the column's type).
     */
   def bind[T](value: T, tpe: TypedType[T]): Rep[T] =
-    if (!SeekSettings.hasType(value, tpe)) LiteralColumn(value)(tpe)
+    if (!bindCursorValues || !SeekSettings.hasType(value, tpe)) LiteralColumn(value)(tpe)
     else Rep.forNode[T](LiteralNode(paramType(tpe.asInstanceOf[TypedType[Any]]), value, vol = true))(tpe)
 
   /** Where the database puts nulls without a nulls clause. */
   def defaultNulls(direction: Ordering.Direction): Ordering.NullOrdering =
-    if (nullsSortHigh == (direction == Ordering.Asc)) Ordering.NullsLast else Ordering.NullsFirst
+    if (direction == Ordering.Asc) ascNulls else descNulls
 }
 
 private[slickseeker] object SeekSettings {
@@ -37,14 +39,18 @@ private[slickseeker] object SeekSettings {
         profile,
         support.seekerRowComparisons,
         support.seekerUntypedStringParams,
-        support.seekerNullsSortHigh
+        support.seekerBindCursorValues,
+        support.seekerDefaultNulls(Ordering.Asc),
+        support.seekerDefaultNulls(Ordering.Desc)
       )
     case other =>
       SeekSettings(
         other,
         SlickSeekerSupport.defaultRowComparisons(other),
         SlickSeekerSupport.defaultUntypedStringParams(other),
-        SlickSeekerSupport.defaultNullsSortHigh(other)
+        SlickSeekerSupport.defaultBindCursorValues(other),
+        SlickSeekerSupport.defaultNulls(other, Ordering.Asc),
+        SlickSeekerSupport.defaultNulls(other, Ordering.Desc)
       )
   }
 

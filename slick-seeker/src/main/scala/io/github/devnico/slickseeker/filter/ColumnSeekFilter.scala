@@ -27,7 +27,7 @@ private[slickseeker] trait BuiltInSeekFilter[T] extends ColumnSeekFilter[T] {
 private[slickseeker] trait RowComparableSeekFilter[T] extends BuiltInSeekFilter[T]
 
 /** The built-in filter on an `Option` column: it needs an explicit nulls ordering, so seekers resolve a missing one to
-  * where the database puts nulls by default (`SlickSeekerSupport.seekerNullsSortHigh`).
+  * where the database puts nulls by default (`SlickSeekerSupport.seekerDefaultNulls`).
   */
 private[slickseeker] trait NullableSeekFilter[T] extends BuiltInSeekFilter[T]
 

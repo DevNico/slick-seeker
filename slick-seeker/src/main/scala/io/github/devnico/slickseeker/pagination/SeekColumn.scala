@@ -31,7 +31,8 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         val newDir =
           if (direction == io.github.devnico.slickseeker.support.SortDirection.Asc) Ordering.Asc else Ordering.Desc
         val finalNulls =
-          if (current.ord.nulls != Ordering.NullsDefault) {
+          if (current.ord.nulls == Ordering.NullsDefault && self.nonNull) Ordering.NullsDefault
+          else if (current.ord.nulls != Ordering.NullsDefault) {
             (current.ord.nulls, direction) match {
               case (Ordering.NullsFirst, io.github.devnico.slickseeker.support.SortDirection.Desc) => Ordering.NullsLast
               case (Ordering.NullsLast, io.github.devnico.slickseeker.support.SortDirection.Desc)  => Ordering.NullsFirst
@@ -59,12 +60,13 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         val newCol      = originalCol.reverse
 
         (originalCol.ord.direction, originalCol.ord.nulls) match {
-          case (Ordering.Asc, Ordering.NullsFirst)    => newCol.nullsLast
-          case (Ordering.Asc, Ordering.NullsLast)     => newCol.nullsFirst
-          case (Ordering.Asc, Ordering.NullsDefault)  => newCol.nullsFirst
-          case (Ordering.Desc, Ordering.NullsFirst)   => newCol.nullsLast
-          case (Ordering.Desc, Ordering.NullsLast)    => newCol.nullsFirst
-          case (Ordering.Desc, Ordering.NullsDefault) => newCol.nullsLast
+          case (_, Ordering.NullsDefault) if self.nonNull => newCol
+          case (Ordering.Asc, Ordering.NullsFirst)        => newCol.nullsLast
+          case (Ordering.Asc, Ordering.NullsLast)         => newCol.nullsFirst
+          case (Ordering.Asc, Ordering.NullsDefault)      => newCol.nullsFirst
+          case (Ordering.Desc, Ordering.NullsFirst)       => newCol.nullsLast
+          case (Ordering.Desc, Ordering.NullsLast)        => newCol.nullsFirst
+          case (Ordering.Desc, Ordering.NullsDefault)     => newCol.nullsLast
         }
       }
       val filter    = self.filter
@@ -113,6 +115,11 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
 
   /** Whether this column can be part of a row value comparison (see [[RowComparableSeekFilter]]). */
   def rowComparable: Boolean = filter.isInstanceOf[RowComparableSeekFilter[?]]
+
+  /** A column with the built-in non-null filter: a nulls clause in its ordering means nothing, but costs index use on
+    * databases that emulate it (MySQL, SQL Server, SQLite: `isnull(c), c`), so it gets none.
+    */
+  def nonNull: Boolean = rowComparable
 
   /** The decoded cursor value as a parameter of a row value comparison, if this column can be part of one. */
   def rowValue(cursor: CVE, settings: SeekSettings): Option[Node] = filter match {

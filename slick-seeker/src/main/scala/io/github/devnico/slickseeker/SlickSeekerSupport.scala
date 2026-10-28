@@ -38,7 +38,7 @@ import slick.lifted
   *   with SlickSeekerSupport
   *   with PlayJsonSeekerSupport {
   *
-  *   object MyAPI extends super.API with SeekImplicits with JsonSeekerImplicits
+  *   object MyAPI extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
   *   override val api: MyAPI = MyAPI
   * }
   *
@@ -75,12 +75,21 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
     */
   def seekerUntypedStringParams: Boolean = SlickSeekerSupport.defaultUntypedStringParams(driver)
 
-  /** Whether the database sorts nulls after all values without a nulls clause (last ascending, first descending), as
-    * PostgreSQL, Oracle, DB2 and Derby do; H2, MySQL, SQLite, SQL Server and HSQLDB sort them first ascending. Seekers
-    * make that ordering explicit for `Option` columns without one, so pages follow the database's own order and
-    * indexes; override it if your database's default differs.
+  /** Where the database puts nulls in `direction` without a nulls clause. Seekers write it out for `Option` columns
+    * without one, so pages follow the database's own order and indexes. Defaults: last ascending and first descending
+    * for PostgreSQL, Oracle, DB2 and Derby (and unknown databases); first ascending and last descending for H2, MySQL,
+    * SQLite and SQL Server; first in both directions for HSQLDB. Override it if your database or its configuration
+    * sorts nulls differently (a wrong placement costs index use, not correctness).
     */
-  def seekerNullsSortHigh: Boolean = SlickSeekerSupport.defaultNullsSortHigh(driver)
+  def seekerDefaultNulls(direction: Ordering.Direction): Ordering.NullOrdering =
+    SlickSeekerSupport.defaultNulls(driver, direction)
+
+  /** Whether ad-hoc pages bind cursor values as parameters of the column's type (compiled pages always do) rather than
+    * writing them as SQL literals. On by default, except for SQL Server: its driver binds strings as `nvarchar` and
+    * timestamps as `datetime2` by default, which compare differently with `varchar` and `datetime` columns than the
+    * columns sort.
+    */
+  def seekerBindCursorValues: Boolean = SlickSeekerSupport.defaultBindCursorValues(driver)
 
   // Helper to get BaseTypedType[Int]
   protected def intBaseType: BaseTypedType[Int] = ScalaBaseType.intType match {
@@ -249,7 +258,7 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
     * Mix this into your profile's API object:
     * {{{
     * trait MyProfile extends PostgresProfile with SlickSeekerSupport {
-    *   object MyApi extends API with SeekImplicits
+    *   object MyApi extends JdbcAPI with SeekImplicits
     *   override val api: MyApi.type = MyApi
     * }
     * }}}
@@ -315,9 +324,16 @@ object SlickSeekerSupport {
   private[slickseeker] def defaultUntypedStringParams(profile: JdbcProfile): Boolean =
     profile.isInstanceOf[PostgresProfile]
 
-  private[slickseeker] def defaultNullsSortHigh(profile: JdbcProfile): Boolean = profile match {
-    case _: H2Profile | _: MySQLProfile | _: SQLiteProfile | _: SQLServerProfile | _: HsqldbProfile => false
-    case _: PostgresProfile | _: OracleProfile | _: DB2Profile | _: DerbyProfile                    => true
-    case _                                                                                          => true
+  private[slickseeker] def defaultNulls(profile: JdbcProfile, direction: Ordering.Direction): Ordering.NullOrdering = {
+    val asc = direction == Ordering.Asc
+    profile match {
+      case _: HsqldbProfile => Ordering.NullsFirst
+      case _: H2Profile | _: MySQLProfile | _: SQLiteProfile | _: SQLServerProfile =>
+        if (asc) Ordering.NullsFirst else Ordering.NullsLast
+      case _ => if (asc) Ordering.NullsLast else Ordering.NullsFirst
+    }
   }
+
+  private[slickseeker] def defaultBindCursorValues(profile: JdbcProfile): Boolean =
+    !profile.isInstanceOf[SQLServerProfile]
 }

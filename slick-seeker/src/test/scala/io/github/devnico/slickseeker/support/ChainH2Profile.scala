@@ -5,7 +5,8 @@ object ChainH2Profile extends MyH2Profile {
   override def seekerRowComparisons: Boolean = false
 }
 
-/** [[MyH2Profile]] assuming nulls sort high (as on PostgreSQL), though H2 sorts them low. */
+/** [[MyH2Profile]] assuming PostgreSQL's nulls placement (last ascending), though H2 sorts nulls first ascending. */
 object NullsHighH2Profile extends MyH2Profile {
-  override def seekerNullsSortHigh: Boolean = true
+  override def seekerDefaultNulls(direction: slick.ast.Ordering.Direction): slick.ast.Ordering.NullOrdering =
+    if (direction == slick.ast.Ordering.Asc) slick.ast.Ordering.NullsLast else slick.ast.Ordering.NullsFirst
 }

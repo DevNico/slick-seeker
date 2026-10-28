@@ -28,8 +28,8 @@ Type-safe, high-performance cursor-based pagination for Slick 3.5+.
 
 ```scala
 libraryDependencies ++= Seq(
-  "io.github.devnico" %% "slick-seeker" % "0.3.3",
-  "io.github.devnico" %% "slick-seeker-play-json" % "0.3.3" // Optional
+  "io.github.devnico" %% "slick-seeker" % "0.7.0",
+  "io.github.devnico" %% "slick-seeker-play-json" % "0.7.0" // Optional
 )
 ```
 
@@ -56,7 +56,7 @@ trait MyPostgresProfile extends PostgresProfile
   with SlickSeekerSupport
   with PlayJsonSeekerSupport {
 
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
 
   override val api: MyApi.type = MyApi
 }
@@ -111,7 +111,7 @@ import io.github.devnico.slickseeker.playjson.PlayJsonSeekerSupport
 trait MyPostgresProfile extends slick.jdbc.PostgresProfile
   with SlickSeekerSupport
   with PlayJsonSeekerSupport {
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
   override val api: MyApi.type = MyApi
 }
 object MyPostgresProfile extends MyPostgresProfile
@@ -120,7 +120,7 @@ object MyPostgresProfile extends MyPostgresProfile
 trait MyMySQLProfile extends slick.jdbc.MySQLProfile
   with SlickSeekerSupport
   with PlayJsonSeekerSupport {
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
   override val api: MyApi.type = MyApi
 }
 object MyMySQLProfile extends MyMySQLProfile
@@ -129,7 +129,7 @@ object MyMySQLProfile extends MyMySQLProfile
 trait MyH2Profile extends slick.jdbc.H2Profile
   with SlickSeekerSupport
   with PlayJsonSeekerSupport {
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
   override val api: MyApi.type = MyApi
 }
 object MyH2Profile extends MyH2Profile

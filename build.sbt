@@ -83,7 +83,8 @@ lazy val core = (project in file("slick-seeker"))
       "org.slf4j"           % "slf4j-nop" % "2.0.17"  % Test,
       // Real PostgreSQL for PostgreSqlSpec (needs Docker; the spec is canceled without it)
       "org.testcontainers" % "testcontainers-postgresql" % "2.0.5"   % Test,
-      "org.postgresql"     % "postgresql"                % "42.7.14" % Test
+      "org.postgresql"     % "postgresql"                % "42.7.14" % Test,
+      "org.hsqldb"         % "hsqldb"                    % "2.7.4"   % Test
     )
   )
 

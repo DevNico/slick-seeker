@@ -32,7 +32,8 @@ object TypedParamsPgProfile extends MyPgProfile {
   override def seekerUntypedStringParams: Boolean = false
 }
 
-/** Assuming nulls sort low, though PostgreSQL sorts them high: pages get an order no index serves. */
+/** Assuming H2's nulls placement (first ascending), though PostgreSQL sorts them last: an order no index serves. */
 object NullsLowPgProfile extends MyPgProfile {
-  override def seekerNullsSortHigh: Boolean = false
+  override def seekerDefaultNulls(direction: slick.ast.Ordering.Direction): slick.ast.Ordering.NullOrdering =
+    if (direction == slick.ast.Ordering.Asc) slick.ast.Ordering.NullsFirst else slick.ast.Ordering.NullsLast
 }

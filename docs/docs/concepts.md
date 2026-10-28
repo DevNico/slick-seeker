@@ -56,6 +56,16 @@ LIMIT 20
 Cursor values are bound as parameters of the column's type, so they compare exactly like the column's own values
 (a `REAL` column's `0.1f` equals its cursor value, which the literal `0.1` would not). Cursor value codecs should
 therefore decode the column's type; values of another type are written as literals, as in earlier versions.
+Floating-point seek columns stay fragile where the driver sends parameters as text (MariaDB, MySQL with client-side
+prepared statements); prefer `DECIMAL` columns or another seek column there.
+
+- On SQL Server, ad-hoc pages write cursor values as literals (`seekerBindCursorValues = false` by default): its JDBC
+  driver binds strings as `nvarchar` and timestamps as `datetime2`, which compare differently with `varchar` and
+  `datetime` columns than those columns sort, so pages would skip or repeat rows. Compiled pages always bind: on SQL
+  Server, set `sendStringParametersAsUnicode=false` and `datetimeParameterType=datetime` in the JDBC URL (or use
+  `nvarchar` and `datetime2` columns). Also on SQL Server, `page` / `pageWithoutCount` fail with `Ambiguous column name`
+  when a seek column is part of the element (Slick selects it twice); page a selection without the seek columns with
+  `pageAs` / `pageWithoutCountAs` instead.
 
 - On PostgreSQL, string-backed cursor values (`String` and types mapped to `String`) are bound untyped, as literals
   would be, so they compare with native enums, `uuid` and other columns mapped to `String`. Override
@@ -63,7 +73,8 @@ therefore decode the column's type; values of another type are written as litera
 - With parameters, every page of a seeker has the same SQL, so the database may reuse a generic plan (PostgreSQL does
   after five executions of a server-side prepared statement). Check the plans of hot page queries;
   `plan_cache_mode = force_custom_plan` restores planning per cursor value.
-- The settings (`seekerRowComparisons`, `seekerUntypedStringParams`, `seekerNullsSortHigh`) are read from the profile
+- The settings (`seekerRowComparisons`, `seekerUntypedStringParams`, `seekerBindCursorValues`, `seekerDefaultNulls`)
+  are read from the profile
   a page runs with: the implicit profile of `page` / `pageWithoutCount`, or the profile of a `CompiledSeekPage`.
 
 ### Row Value Comparisons
@@ -77,15 +88,18 @@ ORDER BY t.name ASC, t.id ASC
 ```
 
 The results are the same, and the database can scan a composite index on `(name, id)` from the cursor on. Seekers
-with `Option` columns, mixed directions or custom `ColumnSeekFilter`s chain their conditions instead. To enable row
-value comparisons for another database that supports them (or to turn them off), override them in your profile:
+with `Option` columns, mixed directions or custom `ColumnSeekFilter`s chain their conditions instead. To turn row
+value comparisons off (or on for another database), override them in your profile:
 
 ```scala
-trait MyProfile extends MySQLProfile with SlickSeekerSupport {
-  override def seekerRowComparisons: Boolean = true
+trait MyProfile extends PostgresProfile with SlickSeekerSupport {
+  override def seekerRowComparisons: Boolean = false
   // …
 }
 ```
+
+Check the plans before turning them on elsewhere: MySQL and MariaDB support row values but don't use an index range
+for them the way they do for the chained conditions, so keep them off there.
 
 ## Null Handling
 
@@ -102,14 +116,26 @@ Slick Seeker supports explicit null ordering:
 Without a nulls clause, an `Option` column's nulls go where the database puts them by default, and the seeker writes
 that ordering out explicitly so its cursor conditions match it:
 
-| Database | Nulls sort | `.asc` | `.desc` |
-|---|---|---|---|
-| PostgreSQL, Oracle, DB2, Derby | high | nulls last | nulls first |
-| H2, MySQL, SQLite, SQL Server, HSQLDB | low | nulls first | nulls last |
+| Database | `.asc` | `.desc` |
+|---|---|---|
+| PostgreSQL, Oracle, DB2, Derby (and unknown databases) | nulls last | nulls first |
+| H2, MySQL, SQLite, SQL Server | nulls first | nulls last |
+| HSQLDB | nulls first | nulls first |
 
 This keeps the order (and the indexes serving it) the database uses anyway. If your database or its configuration
-sorts nulls differently (e.g. H2 with `DEFAULT_NULL_ORDERING`), override `seekerNullsSortHigh` in your profile; a wrong
-setting costs index use, not correctness.
+sorts nulls differently, override `seekerDefaultNulls` in your profile: e.g. H2 with `DEFAULT_NULL_ORDERING`, or
+PostgreSQL-compatible databases with other defaults that use `PostgresProfile` (CockroachDB sorts nulls first
+ascending, like H2). A wrong placement still pages every row exactly once, but puts null rows elsewhere than the
+database would and can't use an index for the order:
+
+```scala
+trait MyProfile extends H2Profile with SlickSeekerSupport {
+  // H2 with DEFAULT_NULL_ORDERING=HIGH
+  override def seekerDefaultNulls(direction: slick.ast.Ordering.Direction): slick.ast.Ordering.NullOrdering =
+    if (direction == slick.ast.Ordering.Asc) slick.ast.Ordering.NullsLast else slick.ast.Ordering.NullsFirst
+  // …
+}
+```
 
 `seekDirection` sets the null ordering with the direction:
 
@@ -227,8 +253,9 @@ val withCount: PaginatedResult[User] = withoutCountResult.withCount(total)
 ## Compiled Pages
 
 Slick compiles every query to SQL before running it, which can cost more CPU than the database spends on it,
-especially for joined queries. A seeker builds a new query for every page (the cursor values and the limit are
-literals), so its pages cannot be precompiled with `Compiled`. `CompiledSeekPage` binds them as parameters instead:
+especially for joined queries. A seeker builds a new query for every page, so Slick compiles each page again and its
+pages cannot be precompiled with `Compiled`. `CompiledSeekPage` binds the application parameters, cursor values and
+limit as parameters of queries compiled once instead:
 
 ```scala
 // Created once (e.g. a val), reused for every request
@@ -295,7 +322,7 @@ import io.github.devnico.slickseeker.playjson.PlayJsonSeekerSupport
 trait MyPostgresProfile extends PostgresProfile 
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits
   override val api: MyApi.type = MyApi
 }
 ```
@@ -314,7 +341,7 @@ trait MyProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits {
     // Override with custom decorator
     override implicit val cursorEnvironment: CursorEnvironment[JsValue] = 
       CursorEnvironment(jsonCursorCodec, IdentityDecorator())
@@ -348,7 +375,7 @@ trait MyProfile extends PostgresProfile
   with SlickSeekerSupport 
   with PlayJsonSeekerSupport {
   
-  object MyApi extends API with SeekImplicits with JsonSeekerImplicits {
+  object MyApi extends JdbcAPI with SeekImplicits with JsonSeekerImplicits {
     override implicit val cursorEnvironment: CursorEnvironment[JsValue] =
       CursorEnvironment(jsonCursorCodec, Base64Decorator(HexDecorator()))
   }
