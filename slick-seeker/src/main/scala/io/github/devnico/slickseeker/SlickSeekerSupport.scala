@@ -89,7 +89,10 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
     * type of their Scala type), or `None` to compare the parameter as bound. On SQL Server, string values are cast to
     * `VARCHAR(MAX)` or `NVARCHAR(MAX)` and timestamps of `DATETIME` and `SMALLDATETIME` columns to their type, since
     * its driver binds strings as `nvarchar` and timestamps as `datetime2`, which compare differently with these columns
-    * than they sort. `None` elsewhere.
+    * than they sort. On MySQL and MariaDB, values of single-precision `FLOAT` columns are cast to `FLOAT` (MySQL
+    * 8.0.17+ and MariaDB 10.4.5+), since their drivers send them as text by default, whose `DOUBLE` value never equals
+    * the column's single-precision one; `REAL`, Slick's type for `Float`, is `DOUBLE` there. `None` elsewhere. On MySQL
+    * the type is written as `CAST(? AS type)`, so it must be one MySQL's `CAST` takes.
     */
   def seekerCursorValueCast(sqlType: String): Option[String] =
     SlickSeekerSupport.defaultCursorValueCast(driver, sqlType)
@@ -343,6 +346,9 @@ object SlickSeekerSupport {
   private val sqlServerString         = "(?i)\\s*(varchar|char|character)\\b.*".r
   private val sqlServerDatetime       = "(?i)\\s*(datetime|smalldatetime)\\b.*".r
 
+  // FLOAT, FLOAT(p) with p up to 24 and FLOAT(M,D): single precision (FLOAT(25) to FLOAT(53) are DOUBLE)
+  private val mySqlFloat = "(?i)\\s*float\\b(?:\\s*\\(\\s*(\\d+)\\s*(,[^)]*)?\\))?.*".r
+
   private[slickseeker] def defaultCursorValueCast(profile: JdbcProfile, sqlType: String): Option[String] =
     profile match {
       case _: SQLServerProfile =>
@@ -351,6 +357,12 @@ object SlickSeekerSupport {
           case sqlServerString(_)         => Some("VARCHAR(MAX)")
           case sqlServerDatetime(tpe)     => Some(tpe.toUpperCase)
           case _                          => None
+        }
+      case _: MySQLProfile =>
+        sqlType match {
+          case mySqlFloat(precision, scale) if scale != null || precision == null || precision.toInt <= 24 =>
+            Some("FLOAT")
+          case _ => None
         }
       case _ => None
     }

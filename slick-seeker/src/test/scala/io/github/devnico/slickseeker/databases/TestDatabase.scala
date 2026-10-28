@@ -110,7 +110,8 @@ object TestDatabase {
     "org.mariadb.jdbc.Driver",
     new MariaDBContainer("mariadb:11.4.13"),
     limitations = Map(
-      "weight (REAL), id" -> "MariaDB Connector/J sends parameters as text: 0.1 never equals a REAL 0.1f, pages repeat"
+      "weight (REAL), id" ->
+        "REAL is DOUBLE; Connector/J's batches store 0.1f as 0.10000000149…, but send the cursor value as text 0.1"
     )
   )
   val SqlServer = new InContainer(

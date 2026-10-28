@@ -26,8 +26,8 @@ import slick.ast.{
   TypedType,
   Union
 }
-import slick.jdbc.{JdbcProfile, SQLServerProfile}
-import slick.lifted.{LiteralColumn, Rep}
+import slick.jdbc.{JdbcProfile, MySQLProfile, SQLServerProfile}
+import slick.lifted.{LiteralColumn, Rep, SimpleExpression}
 import slick.sql.SqlProfile
 import slick.util.ConstArray
 
@@ -60,13 +60,35 @@ final private[slickseeker] case class SeekSettings(
     SeekSettings
       .declaredType(profile, column, base, tpe)
       .flatMap(cursorValueCast)
-      .fold(value)(sqlType => Rep.forNode[T](Library.Cast.typed(tpe, value.toNode, LiteralNode(sqlType)))(tpe))
+      .fold(value)(sqlType => SeekSettings.cast(profile, value, sqlType, tpe))
 
   /** Whether cursor columns, and columns the items select more than once, are selected as expressions rather than as
     * columns: SQL Server resolves `order by "id"` against the selected columns, and fails if a column is selected twice
     * (in the item and the cursor, or twice in the item).
     */
   def cursorColumnsAsExpressions: Boolean = profile.isInstanceOf[SQLServerProfile]
+
+  /** Whether pages select cursor columns (or items) other than as given (see [[cursorColumn]]). */
+  def rewritesSelection: Boolean = cursorColumnsAsExpressions || profile.isInstanceOf[MySQLProfile]
+
+  /** The cursor column `column` (over the elements of the query `scope`) as pages select it: as an expression on SQL
+    * Server (see [[cursorColumnsAsExpressions]]); on MySQL, cast to `DOUBLE` if its values are cast to `FLOAT` (see
+    * [[SlickSeekerSupport.seekerCursorValueCast]]), since MySQL and MariaDB send `FLOAT` values as text with 6
+    * significant digits, which the cursor value would keep; as given elsewhere.
+    */
+  def cursorColumn(column: Rep[?], scope: Node): Rep[?] =
+    if (cursorColumnsAsExpressions) Rep.forNodeUntyped[Any](SeekSettings.asExpression(column.toNode))
+    else
+      column match {
+        case typed: Rep.TypedRep[?] if profile.isInstanceOf[MySQLProfile] =>
+          val rep = typed.asInstanceOf[Rep.TypedRep[Any]]
+          val single = SeekSettings
+            .declaredType(profile, rep.toNode, scope, rep.tpe)
+            .flatMap(cursorValueCast)
+            .exists(_.trim.equalsIgnoreCase("FLOAT"))
+          if (single) SeekSettings.cast(profile, rep, "DOUBLE", rep.tpe) else column
+        case _ => column
+      }
 
   /** Where the database puts nulls without a nulls clause. */
   def defaultNulls(direction: Ordering.Direction): Ordering.NullOrdering =
@@ -216,6 +238,19 @@ private[slickseeker] object SeekSettings {
     case Bind(_, from, Pure(value, _)) => columnNames(value, from)
     case join: Join                    => rowColumnNames(join.left) ++ rowColumnNames(join.right)
     case _                             => Nil
+  }
+
+  /** `CAST(value AS sqlType)`. Written out on MySQL, where Slick writes casts as JDBC escapes (`{fn convert(…)}`),
+    * which its drivers turn into other expressions or leave out for most types (e.g. `FLOAT`).
+    */
+  def cast[T](profile: JdbcProfile, value: Rep[T], sqlType: String, tpe: TypedType[T]): Rep[T] = profile match {
+    case _: MySQLProfile =>
+      SimpleExpression.unary[T, T] { (v, qb) =>
+        qb.sqlBuilder += "cast("
+        qb.expr(v)
+        qb.sqlBuilder += s" as $sqlType)"
+      }(tpe)(value)
+    case _ => Rep.forNode[T](Library.Cast.typed(tpe, value.toNode, LiteralNode(sqlType)))(tpe)
   }
 
   /** `column` as an expression that is not a column reference, with the same value and type. */

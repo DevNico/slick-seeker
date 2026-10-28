@@ -152,8 +152,27 @@ class HsqldbDatabaseSpec     extends DatabaseSpec(TestDatabase.Hsqldb)
 class SQLiteDatabaseSpec     extends DatabaseSpec(TestDatabase.SQLite)
 class DerbyDatabaseSpec      extends DatabaseSpec(TestDatabase.Derby)
 class PostgreSqlDatabaseSpec extends DatabaseSpec(TestDatabase.PostgreSql)
-class MySqlDatabaseSpec      extends DatabaseSpec(TestDatabase.MySql)
-class MariaDbDatabaseSpec extends DatabaseSpec(TestDatabase.MariaDb) {
+
+/** Also single-precision `FLOAT` columns, and a control without casts. */
+abstract class MySqlFamilyDatabaseSpec(database: TestDatabase)
+    extends DatabaseSpec(database, d => Seq(new MatrixSchema(d), new MySqlFloatSchema(d, d.profile))) {
+  // Same tables as the suite's schema (not set up again)
+  lazy val withoutCasts = new MySqlFloatSchema(database, MatrixProfile.MySqlWithoutCasts)
+
+  if (database.selected) {
+    database.name should {
+      // What the FLOAT casts fix: the drivers send Float parameters as text, whose DOUBLE value never equals FLOAT's
+      Seq("FLOAT, id", "Option FLOAT nullsLast, id desc").foreach { name =>
+        s"skip or repeat rows without casts: $name" in {
+          checkSkipsOrRepeats(withoutCasts.cases.find(_.name == name).get)
+        }
+      }
+    }
+  }
+}
+
+class MySqlDatabaseSpec extends MySqlFamilyDatabaseSpec(TestDatabase.MySql)
+class MariaDbDatabaseSpec extends MySqlFamilyDatabaseSpec(TestDatabase.MariaDb) {
   if (TestDatabase.MariaDb.selected) {
     "MariaDB" should {
       "page REAL columns with server-side prepared statements (binary parameters)" in {

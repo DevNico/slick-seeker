@@ -129,6 +129,49 @@ class SqlRenderingSpec extends AnyWordSpec with Matchers with SlickEquals {
       SlickSeekerSupport.defaultCursorValueCast(PostgresProfile, "VARCHAR(40)") shouldBe None
     }
 
+    "cast MySQL's single-precision FLOAT cursor values to FLOAT, written as CAST" in {
+      def cast(sqlType: String) = SlickSeekerSupport.defaultCursorValueCast(MySQLProfile, sqlType)
+      Seq("FLOAT", "float", "FLOAT(24)", "float(10)", "FLOAT(7,4)", "FLOAT UNSIGNED", "FLOAT NOT NULL").map(
+        cast
+      ) shouldBe
+        Seq.fill(7)(Some("FLOAT"))
+      // REAL (Slick's type for Float) and FLOAT(25) to FLOAT(53) are DOUBLE on MySQL
+      Seq("REAL", "DOUBLE", "DOUBLE PRECISION", "FLOAT(25)", "FLOAT(53)", "DECIMAL(10,2)", "VARCHAR(40)").map(
+        cast
+      ) shouldBe Seq.fill(7)(None)
+      SlickSeekerSupport.defaultCursorValueCast(PostgresProfile, "FLOAT") shouldBe None
+      SlickSeekerSupport.defaultCursorValueCast(SQLServerProfile, "FLOAT") shouldBe None
+
+      implicit val floatCodec: CursorValueCodec[Float, String] = new CursorValueCodec[Float, String] {
+        def encode(value: Float): String         = value.toString
+        def decode(value: String): Option[Float] = value.toFloatOption
+      }
+      class Floats(t: Tag) extends Table[(Int, Float, Float)](t, "floats") {
+        def id     = column[Int]("id", O.PrimaryKey)
+        def single = column[Float]("single", O.SqlType("FLOAT"))
+        def real   = column[Float]("real")
+        def *      = (id, single, real)
+      }
+      val floats = TableQuery[Floats]
+      def render(seeker: SlickSeeker[Floats, (Int, Float, Float), String, ?, ?], profile: JdbcProfile) = {
+        val decoded = env.decodeWithDirectionOrThrow(Some(env.encode(Seq("0.1", "5"), CursorDirection.Forward)))
+        profile.api.streamableQueryActionExtensionMethods(seeker.pageQuery(decoded, 2, SeekSettings.of(profile))).result
+          .statements.head
+      }
+      render(floats.toSeeker.seek(_.single.asc).seek(_.id.asc), MySQLProfile) should include(
+        """`single` > cast(? as FLOAT)"""
+      )
+      // Selected as DOUBLE for the cursor: MySQL sends FLOAT values as text with 6 significant digits
+      val single = floats.toSeeker.seek(_.single.asc).seek(_.id.asc)
+      MySQLProfile.api
+        .streamableQueryActionExtensionMethods(single.qwc.project(floats, SeekSettings.of(MySQLProfile)))
+        .result
+        .statements
+        .head should include("""cast(`single` as DOUBLE)""")
+      render(floats.toSeeker.seek(_.real.asc).seek(_.id.asc), MySQLProfile) should not include "cast("
+      render(floats.toSeeker.seek(_.single.asc).seek(_.id.asc), PostgresProfile) should not include "cast("
+    }
+
     "select cursor columns as expressions on SQL Server only, so a seek column can also be selected" in {
       def select(profile: JdbcProfile) =
         profile.api

@@ -38,33 +38,37 @@ final case class QueryWithCursor[E, U, C, CU, CVE](
     q.map(e => (select(e), toCursor(e)))
   }
 
-  /** [[project]] with the cursor columns as `settings` select them (see [[SeekSettings.cursorColumnsAsExpressions]]).
+  /** [[project]] with the cursor columns as `settings` select them (see [[SeekSettings.cursorColumn]]), and on SQL
+    * Server without repeated columns (see [[SeekSettings.cursorColumnsAsExpressions]]).
     */
   private[slickseeker] def project(q: Query[E, U, Seq], settings: SeekSettings): Query[(E, C), (U, CU), Seq] =
-    if (!settings.cursorColumnsAsExpressions) project(q)
-    else
-      QueryWithCursor.withoutRepeatedColumns(
-        copy[E, U, C, CU, CVE](toCursor = e => QueryWithCursor.asExpressions(toCursor(e))).project(q)
-      )
+    if (!settings.rewritesSelection) project(q)
+    else QueryWithCursor.distinct(selectingCursor(q, settings).project(q), settings)
 
   /** [[projectAs]] with the cursor columns as `settings` select them. */
   private[slickseeker] def projectAs[P, PU](q: Query[E, U, Seq], settings: SeekSettings)(select: E => P)(implicit
       pShape: Shape[FlatShapeLevel, P, PU, P]
   ): Query[(P, C), (PU, CU), Seq] =
-    if (!settings.cursorColumnsAsExpressions) projectAs(q)(select)
-    else
-      QueryWithCursor.withoutRepeatedColumns(
-        copy[E, U, C, CU, CVE](toCursor = e => QueryWithCursor.asExpressions(toCursor(e))).projectAs(q)(select)
-      )
+    if (!settings.rewritesSelection) projectAs(q)(select)
+    else QueryWithCursor.distinct(selectingCursor(q, settings).projectAs(q)(select), settings)
+
+  // This with the cursor columns of elements of `q` as `settings` select them.
+  private def selectingCursor(q: Query[E, U, Seq], settings: SeekSettings): QueryWithCursor[E, U, C, CU, CVE] = {
+    val scope = q.toNode
+    copy[E, U, C, CU, CVE](toCursor = e => QueryWithCursor.mapColumns(toCursor(e))(settings.cursorColumn(_, scope)))
+  }
 }
 
 object QueryWithCursor {
 
-  // The cursor columns `(last, (…, (first, seed)))` as expressions (SeekSettings.asExpression).
-  private def asExpressions[C](cursor: C): C = (cursor match {
-    case (head: Rep[?], tail) => (Rep.forNodeUntyped[Any](SeekSettings.asExpression(head.toNode)), asExpressions(tail))
+  // The cursor columns `(last, (…, (first, seed)))` mapped with `f`.
+  private def mapColumns[C](cursor: C)(f: Rep[?] => Rep[?]): C = (cursor match {
+    case (head: Rep[?], tail) => (f(head), mapColumns(tail)(f))
     case seed                 => seed
   }).asInstanceOf[C]
+
+  private def distinct[T, TU](mapped: Query[T, TU, Seq], settings: SeekSettings): Query[T, TU, Seq] =
+    if (settings.cursorColumnsAsExpressions) withoutRepeatedColumns(mapped) else mapped
 
   // `mapped` (a query's map) with columns it selects more than once as expressions (SeekSettings.withoutRepeatedColumns).
   private def withoutRepeatedColumns[T, TU](mapped: Query[T, TU, Seq]): Query[T, TU, Seq] = mapped.toNode match {
