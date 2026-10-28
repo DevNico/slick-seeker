@@ -1,11 +1,14 @@
 package io.github.devnico.slickseeker.pagination
 
+import io.github.devnico.slickseeker.SlickSeekerSupport
 import io.github.devnico.slickseeker.cursor._
 import io.github.devnico.slickseeker.support.{MyH2Profile, SortDirection}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import MyH2Profile.api._
 import slick.jdbc.{HsqldbProfile, JdbcProfile, MySQLProfile, PostgresProfile, SQLServerProfile, SQLiteProfile}
+
+import java.time.LocalDateTime
 
 // The SQL of cursor pages as other profiles render it (no database needed).
 class SqlRenderingSpec extends AnyWordSpec with Matchers {
@@ -24,18 +27,26 @@ class SqlRenderingSpec extends AnyWordSpec with Matchers {
       if (value == "N") Some(None) else if (value.startsWith("S")) Some(Some(value.drop(1))) else None
   }
 
-  class Items(t: Tag) extends Table[(Int, String, Option[String])](t, "items") {
-    def id   = column[Int]("id", O.PrimaryKey)
-    def name = column[String]("name")
-    def tag  = column[Option[String]]("tag")
-    def *    = (id, name, tag)
+  implicit val dateTimeCodec: CursorValueCodec[LocalDateTime, String] = new CursorValueCodec[LocalDateTime, String] {
+    def encode(value: LocalDateTime): String         = value.toString
+    def decode(value: String): Option[LocalDateTime] = scala.util.Try(LocalDateTime.parse(value)).toOption
   }
+
+  class Items(t: Tag) extends Table[(Int, String, Option[String], String, LocalDateTime)](t, "items") {
+    def id    = column[Int]("id", O.PrimaryKey)
+    def name  = column[String]("name")
+    def tag   = column[Option[String]]("tag")
+    def uname = column[String]("uname", O.SqlType("NVARCHAR(40)"))
+    def at    = column[LocalDateTime]("at", O.SqlType("DATETIME"))
+    def *     = (id, name, tag, uname, at)
+  }
+  val at    = "2020-01-01T10:00:00.003"
   val items = TableQuery[Items]
   val env   = implicitly[CursorEnvironment[String]]
 
   /** The SQL of a page after a cursor with `values`, as `profile` renders it. */
   def sql(
-      seeker: SlickSeeker[Items, (Int, String, Option[String]), String, ?, ?],
+      seeker: SlickSeeker[Items, (Int, String, Option[String], String, LocalDateTime), String, ?, ?],
       profile: JdbcProfile,
       values: Seq[String],
       direction: CursorDirection = CursorDirection.Forward
@@ -48,11 +59,52 @@ class SqlRenderingSpec extends AnyWordSpec with Matchers {
   val byNameId = items.toSeeker.seek(_.name.asc).seek(_.id.asc)
 
   "Cursor pages" should {
-    "write cursor values as literals on SQL Server, and bind them elsewhere" in {
+    "bind cursor values, cast on SQL Server to the type family their column declares" in {
       val sqlServer = sql(byNameId, SQLServerProfile, Seq("n1", "5"))
-      sqlServer should include("'n1'")
-      sqlServer should not include "?"
+      sqlServer should include(""""name" > cast(? as VARCHAR(MAX))""")
+      sqlServer should include(""""id" > ?""")
+      sqlServer should not include "'n1'"
+      val declared =
+        sql(items.toSeeker.seek(_.uname.asc).seek(_.at.desc).seek(_.id.asc), SQLServerProfile, Seq("n", at, "5"))
+      declared should include(""""uname" > cast(? as NVARCHAR(MAX))""")
+      declared should include(""""at" < cast(? as DATETIME)""")
+      // Expressions: the type of their column
+      sql(items.toSeeker.seek(_.uname.toLowerCase.asc).seek(_.id.asc), SQLServerProfile, Seq("n", "5")) should include(
+        "cast(? as NVARCHAR(MAX))"
+      )
       sql(byNameId, PostgresProfile, Seq("n1", "5")) should include("""("name", "id") > (?, ?)""")
+      all(
+        Seq(PostgresProfile, MySQLProfile, SQLiteProfile).map(sql(byNameId, _, Seq("n1", "5")))
+      ) should not include "cast("
+    }
+
+    "cast SQL Server's varchar, nvarchar, char, nchar, datetime and smalldatetime cursor values only" in {
+      def cast(sqlType: String) = SlickSeekerSupport.defaultCursorValueCast(SQLServerProfile, sqlType)
+      cast("VARCHAR(MAX)") shouldBe Some("VARCHAR(MAX)")
+      cast("varchar(40)") shouldBe Some("VARCHAR(MAX)")
+      cast("CHAR(8)") shouldBe Some("VARCHAR(MAX)")
+      cast("NVARCHAR(40)") shouldBe Some("NVARCHAR(MAX)")
+      cast("nchar(8)") shouldBe Some("NVARCHAR(MAX)")
+      cast("datetime") shouldBe Some("DATETIME")
+      cast("SMALLDATETIME") shouldBe Some("SMALLDATETIME")
+      Seq("DATETIME2(6)", "DATETIMEOFFSET(6)", "INTEGER", "DECIMAL(21,2)", "UNIQUEIDENTIFIER", "TEXT").map(
+        cast
+      ) shouldBe
+        Seq.fill(6)(None)
+      SlickSeekerSupport.defaultCursorValueCast(PostgresProfile, "VARCHAR(40)") shouldBe None
+    }
+
+    "select cursor columns as expressions on SQL Server only, so a seek column can also be selected" in {
+      def select(profile: JdbcProfile) =
+        profile.api
+          .streamableQueryActionExtensionMethods(byNameId.qwc.projectAs(items, SeekSettings.of(profile))(_.id))
+          .result
+          .statements
+          .head
+      select(SQLServerProfile) should startWith(
+        """select "id", (case when (1 = 1) then "id" else "id" end), (case when (1 = 1) then "name" else "name" end)"""
+      )
+      select(PostgresProfile) should startWith("""select "id", "id", "name"""")
     }
 
     "give non-null columns no nulls clause, so no database emulates one on backward pages" in {
@@ -75,7 +127,7 @@ class SqlRenderingSpec extends AnyWordSpec with Matchers {
     }
 
     "keep explicit nulls with seekDirection unless it reverses the direction" in {
-      def order(seeker: SlickSeeker[Items, (Int, String, Option[String]), String, ?, ?]) = {
+      def order(seeker: SlickSeeker[Items, (Int, String, Option[String], String, LocalDateTime), String, ?, ?]) = {
         val s = sql(seeker, PostgresProfile, Seq("St1", "5"))
         s.substring(s.toLowerCase.indexOf("order by"))
       }
@@ -88,7 +140,10 @@ class SqlRenderingSpec extends AnyWordSpec with Matchers {
     }
 
     "write the database's default nulls placement out for Option columns" in {
-      def order(profile: JdbcProfile, seeker: SlickSeeker[Items, (Int, String, Option[String]), String, ?, ?]) = {
+      def order(
+          profile: JdbcProfile,
+          seeker: SlickSeeker[Items, (Int, String, Option[String], String, LocalDateTime), String, ?, ?]
+      ) = {
         val s = sql(seeker, profile, Seq("St1", "5"))
         s.substring(s.toLowerCase.indexOf("order by"))
       }
