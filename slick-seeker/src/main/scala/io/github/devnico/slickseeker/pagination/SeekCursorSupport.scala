@@ -56,16 +56,19 @@ final private[slickseeker] case class SeekCursorSupport[E, U, CVE, C, CU](
         for {
           t <- tail
           v <- column.codec.decode(value)
-        } yield {
-          val tpe = column.typedType()
-          require(
-            SeekSettings.hasType(v, tpe),
-            s"The cursor value codec of a ${SeekSettings.describe(tpe)} column decoded ${v.getClass.getName}: compiled " +
-              "pages bind cursor values as parameters, so codecs must decode the column's type"
-          )
-          (v, t)
-        }
+        } yield (v, t)
       }
+
+  /** Whether the [[decodeParams]] values all have their column's type, so they can be bound as parameters (cursor value
+    * codecs are not checked to decode their type). Needs the sort keys' `typedType`.
+    */
+  def bindable(params: Any): Boolean =
+    columns.reverseIterator
+      .foldLeft[(Boolean, Any)]((true, params)) {
+        case ((ok, (value, tail)), column) => (ok && SeekSettings.hasType(value, column.typedType()), tail)
+        case (acc, _)                      => acc
+      }
+      ._1
 
   /** Which cursor values of [[decodeParams]] are `None`, first column first. */
   @scala.annotation.tailrec

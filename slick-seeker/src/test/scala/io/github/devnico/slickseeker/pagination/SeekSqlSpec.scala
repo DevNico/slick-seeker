@@ -132,8 +132,7 @@ class SeekSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
       lastSql(page(first.nextCursor)) should include("""("name", "id") > (?, 1)""")
 
       val compiled = CompiledSeekPage[Unit]((_: Unit) => items.toSeeker.seek(_.name.asc).seek(_.id.asc)(byId))(_.id)
-      val error    = the[IllegalArgumentException] thrownBy compiled.pageWithoutCount((), 4, first.nextCursor)
-      error.getMessage should include("The cursor value codec of a int column decoded java.lang.Long")
+      await(db.run(compiled.pageWithoutCount((), 4, first.nextCursor))) shouldBe page(first.nextCursor)
     }
 
     "use row comparisons in compiled pages" in {

@@ -35,10 +35,13 @@ import scala.concurrent.ExecutionContext
   * don't decode or don't match the cursor columns give the first page (the ad-hoc seeker then pages without a cursor
   * filter, or filters on the leading columns if there are fewer values than columns).
   *
-  * Requirements: at least one seek column; the sort keys provide
-  * [[io.github.devnico.slickseeker.filter.SeekerSortKey.typedType]] and their filters
-  * [[io.github.devnico.slickseeker.filter.ColumnSeekFilter.applyParam]] (the built-in ones do; both checked on
-  * creation); the cursor value codecs decode values of the column's type (checked per page).
+  * Cursor pages run as ad-hoc pages ([[SlickSeeker.pageWithoutCountAs]]), compiled per page, where they can't bind
+  * cursor values: for seekers with custom sort keys without
+  * [[io.github.devnico.slickseeker.filter.SeekerSortKey.typedType]] or custom filters without
+  * [[io.github.devnico.slickseeker.filter.ColumnSeekFilter.applyParam]], and for cursor values a codec decoded as
+  * another type than the column's.
+  *
+  * The seeker needs at least one seek column.
   */
 final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     build: A => SlickSeeker[E, U, CVE, Any, Any],
@@ -62,28 +65,32 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
 
   private def placeholder[T](what: String): Any => T = _ => throw new IllegalStateException(s"$what (structure only)")
 
-  // The cursor (columns, types, encoding) from the seeker's structure without real parameters: nothing is executed and
-  // the structure's query is not kept.
-  private val cursorSupport: SeekCursorSupport[E, U, CVE, Any, Any] = {
+  // The cursor (columns, types, encoding) from the seeker's structure without real parameters, and whether its cursor
+  // pages can bind cursor values (custom sort keys and filters may not): nothing is executed and the structure's query
+  // is not kept.
+  private val (cursorSupport, bindsCursorValues): (SeekCursorSupport[E, U, CVE, Any, Any], Boolean) = {
     val structure = build(appShape.buildParams(placeholder("parameter")))
     require(structure.columns.nonEmpty, "CompiledSeekPage needs a seeker with at least one seek column")
-    // Fails here rather than on the first cursor page if a sort key or filter cannot bind parameters.
-    structure.paramPageQuery[P, PU](
-      Some(structure.cursorSupport.paramShape(settings.paramType).buildParams(placeholder("cursor value"))),
-      List.fill(structure.columns.size)(false),
-      isBackward = false,
-      limitShape.buildParams(placeholder("limit")),
-      settings
-    )(select)
-    structure.cursorSupport
+    val binds =
+      try {
+        structure.paramPageQuery[P, PU](
+          Some(structure.cursorSupport.paramShape(settings.paramType).buildParams(placeholder("cursor value"))),
+          List.fill(structure.columns.size)(false),
+          isBackward = false,
+          limitShape.buildParams(placeholder("limit")),
+          settings
+        )(select)
+        true
+      } catch { case _: UnsupportedOperationException => false }
+    (structure.cursorSupport, binds)
   }
 
-  private val cursorShape = cursorSupport.paramShape(settings.paramType)
+  private lazy val cursorShape = cursorSupport.paramShape(settings.paramType)
 
   /** The most page query forms this instance can create: the first page, and forward and backward per combination of
-    * `None` values in nullable cursor columns.
+    * `None` values in nullable cursor columns (only the first page if its cursor pages run as ad-hoc pages).
     */
-  val maxForms: Int = 1 + 2 * (1 << cursorSupport.nullableColumns)
+  val maxForms: Int = if (bindsCursorValues) 1 + 2 * (1 << cursorSupport.nullableColumns) else 1
 
   private val firstPage = compile[(AU, Long), PageQuery, Rows](Shape.tuple2Shape(appShape, limitShape)) { params =>
     val (a, limit) = params.asInstanceOf[(A, ConstColumn[Long])]
@@ -144,23 +151,44 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
 
     val normalizedLimit = SlickSeeker.normalizeLimit(limit, maxLimit)
     val fetchLimit      = normalizedLimit.toLong + 1
-    val decoded = cursorEnvironment
-      .decodeWithDirectionOrThrow(cursor)
-      .flatMap { case (direction, values) =>
-        cursorSupport.decodeParams(values).map(cursorValues => (direction == CursorDirection.Backward, cursorValues))
-      }
+    val decoded         = cursorEnvironment.decodeWithDirectionOrThrow(cursor)
 
-    val rows: DBIOAction[Rows, NoStream, Effect.Read] = decoded match {
-      case None =>
-        firstPage((params, fetchLimit)).result
-      case Some((isBackward, cursorValues)) =>
-        cursorPage(isBackward, cursorSupport.nullFlags(cursorValues))((params, cursorValues, fetchLimit)).result
+    def compiledPage(cursorValues: Option[(Boolean, Any)]) = {
+      val rows: DBIOAction[Rows, NoStream, Effect.Read] = cursorValues match {
+        case None =>
+          firstPage((params, fetchLimit)).result
+        case Some((isBackward, values)) =>
+          cursorPage(isBackward, cursorSupport.nullFlags(values))((params, values, fetchLimit)).result
+      }
+      rows.map { results =>
+        cursorSupport.toPage(results, cursorValues.exists(_._1), cursorValues.isDefined, normalizedLimit)
+      }
     }
 
-    rows.map { results =>
-      cursorSupport.toPage(results, decoded.exists(_._1), hasCurrentCursor = decoded.isDefined, normalizedLimit)
+    decoded match {
+      case None                          => compiledPage(None)
+      case Some(_) if !bindsCursorValues => adHocPage(params, limit, cursor, maxLimit)
+      case Some((direction, values)) =>
+        cursorSupport.decodeParams(values) match {
+          case None => compiledPage(None)
+          case Some(cursorValues) if cursorSupport.bindable(cursorValues) =>
+            compiledPage(Some((direction == CursorDirection.Backward, cursorValues)))
+          case Some(_) => adHocPage(params, limit, cursor, maxLimit)
+        }
     }
   }
+
+  // The page as the ad-hoc seeker of these parameter values gives it, for cursors whose values can't be bound.
+  private def adHocPage(params: AU, limit: Int, cursor: Option[String], maxLimit: Int)(implicit
+      cursorEnvironment: CursorEnvironment[CVE],
+      ec: ExecutionContext
+  ): dbio.DBIOAction[PaginatedResultWithoutCount[PU], dbio.NoStream, dbio.Effect.Read] =
+    build(appShape.pack(params)).pageWithoutCountAs(limit, cursor, maxLimit)(select)(
+      selectShape,
+      profile,
+      cursorEnvironment,
+      ec
+    )
 }
 
 object CompiledSeekPage {
