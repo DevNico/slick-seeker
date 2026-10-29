@@ -1,5 +1,6 @@
 package io.github.devnico.slickseeker.pagination
 
+import io.github.devnico.slickseeker.support.SlickEquals
 import io.github.devnico.slickseeker.cursor._
 import io.github.devnico.slickseeker.support.{MyH2Profile, SortDirection}
 import org.scalatest.BeforeAndAfterAll
@@ -13,7 +14,7 @@ import scala.language.existentials
 import scala.util.Try
 import java.sql.Timestamp
 
-class SlickSeekerIntegrationSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
+class SlickSeekerIntegrationSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll with SlickEquals {
 
   implicit val ec: ExecutionContext = ExecutionContext.global
 
@@ -247,9 +248,8 @@ class SlickSeekerIntegrationSpec extends AnyWordSpec with Matchers with BeforeAn
 
       val result = await(db.run(seeker.page(limit = 10, cursor = None)))
 
-      // Note: This test might be flaky due to H2 in-memory DB setup
-      // The filtered query should return 1 item if data setup works correctly
-      result.items.size should be <= 1
+      result.items.map(_.firstName) shouldBe Seq("Alice")
+      result.total shouldBe 1
       if (result.items.nonEmpty) {
         result.items.head.firstName shouldBe "Alice"
       }
