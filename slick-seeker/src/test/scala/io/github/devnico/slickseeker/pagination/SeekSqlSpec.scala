@@ -139,8 +139,24 @@ class SeekSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
         CompiledSeekPage.strict[Unit]((_: Unit) => items.toSeeker.seek(_.name.asc).seek(_.id.asc)(byId))(_.id)
       await(db.run(strict.pageWithoutCount((), 4, None))) shouldBe first
       val error = the[IllegalArgumentException] thrownBy strict.pageWithoutCount((), 4, first.nextCursor)
-      error.getMessage shouldBe "CompiledSeekPage.strict: the cursor value codec of a int column decoded " +
+      error.getMessage shouldBe "CompiledSeekPage.strict: the cursor value codec of a column of type int decoded " +
         "java.lang.Long, which can't be bound"
+      // page throws before its count runs, like pageWithoutCount
+      the[IllegalArgumentException] thrownBy strict.page((), 4, first.nextCursor) shouldBe an[IllegalArgumentException]
+
+      // Codecs decoding null: described, not a NullPointerException
+      val nulls: CursorValueCodec[String, String] = new CursorValueCodec[String, String] {
+        def encode(value: String): String         = value
+        def decode(value: String): Option[String] = Some(null)
+      }
+      val byName = MyH2Profile.api.seekerSortKeyIdentity[String, String](implicitly, implicitly, nulls)
+      val strictNull =
+        CompiledSeekPage.strict[Unit]((_: Unit) => items.toSeeker.seek(_.name.asc)(byName).seek(_.id.asc))(_.id)
+      (the[IllegalArgumentException] thrownBy strictNull.pageWithoutCount((), 4, first.nextCursor)).getMessage should
+        include("of type java.lang.String decoded null")
+      val lenientNull =
+        CompiledSeekPage[Unit]((_: Unit) => items.toSeeker.seek(_.name.asc)(byName).seek(_.id.asc))(_.id)
+      noException should be thrownBy lenientNull.pageWithoutCount((), 4, first.nextCursor)
       // Such pages run as ad-hoc pages, with the application parameters still bound
       val fromId = CompiledSeekPage[Int]((min: ConstColumn[Int]) =>
         items.filter(_.id >= min).toSeeker.seek(_.name.asc).seek(_.id.asc)(byId)
