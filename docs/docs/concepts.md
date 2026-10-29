@@ -350,7 +350,9 @@ byMinAge.pageWithoutCount(params = 30, limit = 20, cursor = None)   // or .page(
   without a cursor filter, or with one on the leading columns if there are fewer values than columns).
 - Cursor pages bind cursor values as parameters. Where they can't, they run as ad-hoc pages (same items and cursors,
   compiled per page): for custom `SeekerSortKey`s without `typedType` or `ColumnSeekFilter`s without `applyParam`,
-  and for cursor values a codec decoded as another type than the column's.
+  and for cursor values a codec decoded as another type than the column's. To rule that out, create it with
+  `CompiledSeekPage.strict[AU](…)(…)`: it throws `IllegalArgumentException` on creation if a sort key or filter
+  can't bind cursor values, and on a page with a cursor value of another type, instead of running ad-hoc pages.
 - Generic plans: see [Cursor Values as Parameters](#cursor-values-as-parameters).
 - The seeker needs at least one seek column.
 - `SlickPgTupleSeeker` (deprecated) is not supported; `toSeeker` seekers use row value comparisons where they

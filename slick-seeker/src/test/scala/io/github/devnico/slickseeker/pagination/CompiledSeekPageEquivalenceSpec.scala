@@ -222,6 +222,16 @@ class CompiledSeekPageEquivalenceSpec extends AnyWordSpec with Matchers with Bef
       val page = CompiledSeekPage[Int]((minId: ConstColumn[Int]) => seeker(minId))(_.id)
       page.maxForms shouldBe 1
 
+      // Strict ones refuse them
+      val error = the[IllegalArgumentException] thrownBy
+        CompiledSeekPage.strict[Int]((minId: ConstColumn[Int]) => seeker(minId))(_.id)
+      error.getMessage should startWith("CompiledSeekPage.strict: ")
+      error.getMessage should include("does not support compiled pages")
+      val strictTyped = CompiledSeekPage.strict[Int]((minId: ConstColumn[Int]) =>
+        rows.filter(_.id >= minId).toSeeker.seek(_.tag.asc.nullsLast).seek(_.id.asc)
+      )(_.id)
+      strictTyped.maxForms shouldBe 5
+
       @tailrec def walk(
           cursor: Option[String],
           pages: Vector[PaginatedResultWithoutCount[Int]]

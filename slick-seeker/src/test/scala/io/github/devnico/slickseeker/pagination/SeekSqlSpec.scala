@@ -133,6 +133,14 @@ class SeekSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
 
       val compiled = CompiledSeekPage[Unit]((_: Unit) => items.toSeeker.seek(_.name.asc).seek(_.id.asc)(byId))(_.id)
       await(db.run(compiled.pageWithoutCount((), 4, first.nextCursor))) shouldBe page(first.nextCursor)
+
+      // Strict ones fail on such a page instead
+      val strict =
+        CompiledSeekPage.strict[Unit]((_: Unit) => items.toSeeker.seek(_.name.asc).seek(_.id.asc)(byId))(_.id)
+      await(db.run(strict.pageWithoutCount((), 4, None))) shouldBe first
+      val error = the[IllegalArgumentException] thrownBy strict.pageWithoutCount((), 4, first.nextCursor)
+      error.getMessage shouldBe "CompiledSeekPage.strict: the cursor value codec of a int column decoded " +
+        "java.lang.Long, which can't be bound"
       // Such pages run as ad-hoc pages, with the application parameters still bound
       val fromId = CompiledSeekPage[Int]((min: ConstColumn[Int]) =>
         items.filter(_.id >= min).toSeeker.seek(_.name.asc).seek(_.id.asc)(byId)
