@@ -158,9 +158,11 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
       ec: ExecutionContext
   ): dbio.DBIOAction[PaginatedResult[PU], dbio.NoStream, dbio.Effect.Read] = {
     import profile.api._
+    // Built first, so it throws (bad cursors, strict failures) before the count runs, like pageWithoutCount
+    val withoutCount = pageWithoutCount(params, limit, cursor, maxLimit)
     for {
       total  <- count(params).result
-      result <- pageWithoutCount(params, limit, cursor, maxLimit)
+      result <- withoutCount
     } yield result.withCount(total)
   }
 
