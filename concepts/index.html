@@ -1145,7 +1145,8 @@ limit as parameters of queries compiled once instead:</p>
   compiled in. Optional filters need either one <code>CompiledSeekPage</code> per combination or SQL-side handling
   (<code>p.isEmpty || …</code>).</li>
 <li>Each form of the page query is compiled once: the first page and, for forward and backward pages, one per
-  combination of <code>None</code> values in nullable cursor columns (<code>maxForms</code> = 1 + 2 × 2^nullable columns).</li>
+  combination of <code>None</code> values in nullable cursor columns (<code>maxForms</code> = 1 + 2 × 2^nullable columns, or 1 where
+  cursor pages run as ad-hoc pages).</li>
 <li>Items and cursors are the same as those of <code>pageWithoutCountAs</code> / <code>pageAs</code> for every cursor the seeker produced,
   including row value comparisons. A cursor that can't be decoded at all fails like it does for the ad-hoc seeker;
   one whose values don't decode or don't fit the cursor columns gives the first page (the ad-hoc seeker then pages
