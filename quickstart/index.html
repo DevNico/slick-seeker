@@ -612,10 +612,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#postgresql-use-type-safe-tuple-seeker" class="md-nav__link">
+  <a href="#postgresql" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PostgreSQL? Use Type-Safe Tuple Seeker!
+        PostgreSQL
       
     </span>
   </a>
@@ -633,17 +633,6 @@
   
     <nav class="md-nav" aria-label="Quick Reference">
       <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#choose-your-seeker" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Choose Your Seeker
-      
-    </span>
-  </a>
-  
-</li>
         
           <li class="md-nav__item">
   <a href="#api-quick-reference" class="md-nav__link">
@@ -914,94 +903,23 @@
 </span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">id</span><span class="p">)</span>
 </span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">  </span><span class="p">.</span><span class="n">seekDirection</span><span class="p">(</span><span class="nc">SortDirection</span><span class="p">.</span><span class="nc">Desc</span><span class="p">)</span>
 </span></code></pre></div>
-<h2 id="postgresql-use-type-safe-tuple-seeker">PostgreSQL? Use Type-Safe Tuple Seeker!</h2>
-<p>If you're using <strong>PostgreSQL</strong> and all your seek columns are <strong>non-nullable</strong> with <strong>uniform direction</strong>, use <code>SlickPgTupleSeeker</code> for compile-time safety and better performance:</p>
-<div class="language-scala highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1">// Standard SlickSeeker (works on any database)</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="kd">val</span><span class="w"> </span><span class="n">standardSeeker</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">users</span><span class="p">.</span><span class="n">toSeeker</span>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">name</span><span class="p">.</span><span class="n">asc</span><span class="p">)</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">id</span><span class="p">.</span><span class="n">asc</span><span class="p">)</span>
-</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>
-</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="c1">// PostgreSQL-optimized with compile-time safety</span>
-</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="kd">val</span><span class="w"> </span><span class="n">pgSeeker</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">users</span><span class="p">.</span><span class="n">toPgTupleSeekerAsc</span>
-</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">name</span><span class="p">)</span><span class="w">   </span><span class="c1">// No .asc needed - enforced by type</span>
-</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">id</span><span class="p">)</span>
-</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>
-</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="c1">// Generates optimized SQL:</span>
-</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="c1">// WHERE (name, id) &gt; (?, ?)</span>
-</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="c1">// vs standard: WHERE (name &gt; ?) OR (name = ? AND id &gt; ?)</span>
-</span></code></pre></div>
-<p><strong>Benefits:</strong>
-- ✅ <strong>Compile-time safety</strong> - rejects <code>Option[T]</code> columns at compilation
-- ✅ <strong>Simpler SQL</strong> - single tuple comparison instead of OR clauses
-- ✅ <strong>Better performance</strong> - easier for PostgreSQL to optimize
-- ✅ <strong>Type-enforced direction</strong> - impossible to mix ASC/DESC</p>
-<p><strong>Use when:</strong>
-- Database is PostgreSQL 8.2+ or H2 in PostgreSQL mode
-- All columns are non-nullable (no <code>Option[T]</code>)
-- All columns have same direction (all ASC or all DESC)</p>
-<p><strong>See <a href="../cookbook/#postgresql-tuple-optimization">Cookbook - PostgreSQL Tuple Optimization</a> for details.</strong></p>
+<h2 id="postgresql">PostgreSQL</h2>
+<p>On PostgreSQL (and H2), <code>toSeeker</code> compares non-null seek columns that all sort the same way as one row value,
+<code>WHERE (name, id) &gt; (?, ?)</code>, which uses a composite index directly. See
+<a href="../concepts/#row-value-comparisons">Row Value Comparisons</a>.</p>
 <h2 id="quick-reference">Quick Reference</h2>
-<h3 id="choose-your-seeker">Choose Your Seeker</h3>
-<table>
-<thead>
-<tr>
-<th>Feature</th>
-<th>Standard <code>SlickSeeker</code></th>
-<th><code>SlickPgTupleSeeker</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Databases</strong></td>
-<td>All (PostgreSQL, MySQL, H2, SQLite, etc.)</td>
-<td>PostgreSQL 8.2+, H2 (PG mode)</td>
-</tr>
-<tr>
-<td><strong>Nullable columns</strong></td>
-<td>✅ Yes</td>
-<td>❌ No - compile error</td>
-</tr>
-<tr>
-<td><strong>Mixed directions</strong></td>
-<td>✅ Yes</td>
-<td>❌ No - type enforced</td>
-</tr>
-<tr>
-<td><strong>Type safety</strong></td>
-<td>Runtime</td>
-<td><strong>Compile-time</strong></td>
-</tr>
-<tr>
-<td><strong>SQL generation</strong></td>
-<td>OR-based clauses</td>
-<td><strong>Tuple comparison</strong></td>
-</tr>
-<tr>
-<td><strong>Performance</strong></td>
-<td>Good</td>
-<td><strong>Better (PostgreSQL)</strong></td>
-</tr>
-</tbody>
-</table>
 <h3 id="api-quick-reference">API Quick Reference</h3>
-<div class="language-scala highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1">// Standard seeker</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="n">users</span><span class="p">.</span><span class="n">toSeeker</span>
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">col</span><span class="p">.</span><span class="n">asc</span><span class="p">)</span><span class="w">           </span><span class="c1">// Ascending</span>
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">col</span><span class="p">.</span><span class="n">desc</span><span class="p">)</span><span class="w">          </span><span class="c1">// Descending</span>
-</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">col</span><span class="p">.</span><span class="n">nullsLast</span><span class="p">.</span><span class="n">asc</span><span class="p">)</span><span class="w"> </span><span class="c1">// Nulls handling</span>
-</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">  </span><span class="p">.</span><span class="n">seekDirection</span><span class="p">(...)</span><span class="w">        </span><span class="c1">// Batch direction change</span>
-</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>
-</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="c1">// PostgreSQL tuple seeker (type-safe)</span>
-</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="n">users</span><span class="p">.</span><span class="n">toPgTupleSeekerAsc</span><span class="w">     </span><span class="c1">// All columns ASC</span>
-</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">col</span><span class="p">)</span><span class="w">               </span><span class="c1">// No .asc/.desc needed</span>
-</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>
-</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="n">users</span><span class="p">.</span><span class="n">toPgTupleSeekerDesc</span><span class="w">    </span><span class="c1">// All columns DESC</span>
-</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">col</span><span class="p">)</span>
-</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>
-</span><span id="__span-14-15"><a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a><span class="c1">// Pagination (same for both seeker types)</span>
-</span><span id="__span-14-16"><a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a><span class="n">seeker</span><span class="p">.</span><span class="n">page</span><span class="p">(</span><span class="n">limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="n">cursor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">None</span><span class="p">)</span><span class="w">                    </span><span class="c1">// With total count</span>
-</span><span id="__span-14-17"><a id="__codelineno-14-17" name="__codelineno-14-17" href="#__codelineno-14-17"></a><span class="n">seeker</span><span class="p">.</span><span class="n">page</span><span class="p">(</span><span class="n">limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="n">cursor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Some</span><span class="p">(</span><span class="s">"..."</span><span class="p">))</span><span class="w">              </span><span class="c1">// Next/prev page</span>
-</span><span id="__span-14-18"><a id="__codelineno-14-18" name="__codelineno-14-18" href="#__codelineno-14-18"></a><span class="n">seeker</span><span class="p">.</span><span class="n">pageWithoutCount</span><span class="p">(</span><span class="n">limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="n">cursor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">None</span><span class="p">)</span><span class="w">         </span><span class="c1">// Without total count</span>
+<div class="language-scala highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1">// Standard seeker</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">users</span><span class="p">.</span><span class="n">toSeeker</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">col</span><span class="p">.</span><span class="n">asc</span><span class="p">)</span><span class="w">           </span><span class="c1">// Ascending</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">col</span><span class="p">.</span><span class="n">desc</span><span class="p">)</span><span class="w">          </span><span class="c1">// Descending</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">  </span><span class="p">.</span><span class="n">seek</span><span class="p">(</span><span class="n">_</span><span class="p">.</span><span class="n">col</span><span class="p">.</span><span class="n">nullsLast</span><span class="p">.</span><span class="n">asc</span><span class="p">)</span><span class="w"> </span><span class="c1">// Nulls handling</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">  </span><span class="p">.</span><span class="n">seekDirection</span><span class="p">(...)</span><span class="w">        </span><span class="c1">// Batch direction change</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="c1">// Pagination</span>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="n">seeker</span><span class="p">.</span><span class="n">page</span><span class="p">(</span><span class="n">limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="n">cursor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">None</span><span class="p">)</span><span class="w">                    </span><span class="c1">// With total count</span>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="n">seeker</span><span class="p">.</span><span class="n">page</span><span class="p">(</span><span class="n">limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="n">cursor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Some</span><span class="p">(</span><span class="s">"..."</span><span class="p">))</span><span class="w">              </span><span class="c1">// Next/prev page</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="n">seeker</span><span class="p">.</span><span class="n">pageWithoutCount</span><span class="p">(</span><span class="n">limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="n">cursor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">None</span><span class="p">)</span><span class="w">         </span><span class="c1">// Without total count</span>
 </span></code></pre></div>
 <h2 id="whats-next">What's Next?</h2>
 <ul>

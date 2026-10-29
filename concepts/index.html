@@ -915,10 +915,13 @@ that ordering out explicitly so its cursor conditions match it:</p>
 </tr>
 </tbody>
 </table>
+<p>Custom <code>ColumnSeekFilter</code>s on <code>Option</code> columns and expressions get this ordering too, so they always see an explicit
+<code>NullsFirst</code> / <code>NullsLast</code> there; on non-null columns they keep <code>NullsDefault</code>, also on backward pages.</p>
 <p>This keeps the order (and the indexes serving it) the database uses anyway. If your database or its configuration
 sorts nulls differently, override <code>seekerDefaultNulls</code> in your profile: e.g. H2 with <code>DEFAULT_NULL_ORDERING</code>, or
 PostgreSQL-compatible databases with other defaults that use <code>PostgresProfile</code> (CockroachDB sorts nulls first
-ascending, like H2). A wrong placement still pages every row exactly once, but puts null rows elsewhere than the
+ascending, like H2). A wrong placement still pages every row exactly once (with custom filters, if they follow the
+nulls ordering they get), but puts null rows elsewhere than the
 database would and can't use an index for the order:</p>
 <div class="language-scala highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">trait</span><span class="w"> </span><span class="nc">MyProfile</span><span class="w"> </span><span class="k">extends</span><span class="w"> </span><span class="nc">H2Profile</span><span class="w"> </span><span class="k">with</span><span class="w"> </span><span class="nc">SlickSeekerSupport</span><span class="w"> </span><span class="p">{</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="c1">// H2 with DEFAULT_NULL_ORDERING=HIGH</span>
@@ -1152,7 +1155,6 @@ limit as parameters of queries compiled once instead:</p>
   and for cursor values a codec decoded as another type than the column's.</li>
 <li>Generic plans: see <a href="#cursor-values-as-parameters">Cursor Values as Parameters</a>.</li>
 <li>The seeker needs at least one seek column.</li>
-<li><code>SlickPgTupleSeeker</code> is not supported; <code>toSeeker</code> seekers use the same row value comparisons where they qualify.</li>
 </ul>
 <h2 id="bidirectional-pagination">Bidirectional Pagination</h2>
 <p>Slick Seeker supports both forward and backward navigation with both <code>page()</code> and <code>pageWithoutCount()</code>:</p>
