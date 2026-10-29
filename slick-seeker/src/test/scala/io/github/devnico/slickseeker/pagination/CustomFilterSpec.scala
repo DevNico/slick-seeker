@@ -2,7 +2,7 @@ package io.github.devnico.slickseeker.pagination
 
 import io.github.devnico.slickseeker.cursor._
 import io.github.devnico.slickseeker.filter.{ColumnSeekFilter, ColumnSeekFilterTypes, SeekerSortKey}
-import io.github.devnico.slickseeker.support.MyH2Profile
+import io.github.devnico.slickseeker.support.{MyH2Profile, SortDirection}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -128,16 +128,19 @@ class CustomFilterSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll 
             ) = builtIn.filter.applyParam(column, value, valueIsNull, prevCond)
           }
         }
-      Seq(
-        items.toSeeker.seek(_.tag.asc)(binding).seek(_.id.asc),
-        items.toSeeker.seek(_.tag.desc)(binding).seek(_.id.asc)
-      )
-        .foreach { seeker =>
-          val compiled = CompiledSeekPage[Unit]((_: Unit) => seeker)(_.id)
-          compiled.maxForms shouldBe 5
-          walk(c => await(db.run(compiled.pageWithoutCount((), 3, c)))) shouldBe
-            walk(c => await(db.run(seeker.pageWithoutCountAs(3, c)(_.id))))
-        }
+      Seq[(SlickSeeker[Items, (Int, Option[String]), String, ?, ?], Query[Items, (Int, Option[String]), Seq])](
+        (items.toSeeker.seek(_.tag.asc)(binding).seek(_.id.asc), items.sortBy(r => (r.tag.asc, r.id.asc))),
+        (items.toSeeker.seek(_.tag.desc)(binding).seek(_.id.asc), items.sortBy(r => (r.tag.desc, r.id.asc))),
+        (
+          items.toSeeker.seek(_.tag)(binding).seek(_.id).seekDirection(SortDirection.Desc),
+          items.sortBy(r => (r.tag.desc, r.id.desc))
+        )
+      ).foreach { case (seeker, native) =>
+        val expected = await(db.run(native.map(_.id).result)).toVector
+        val compiled = CompiledSeekPage[Unit]((_: Unit) => seeker)(_.id)
+        compiled.maxForms shouldBe 5
+        walk(c => await(db.run(compiled.pageWithoutCount((), 3, c)))) shouldBe ((expected, expected))
+      }
     }
 
     "page a column of a mapped query in the database's order, forward and backward" in {

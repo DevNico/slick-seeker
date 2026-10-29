@@ -250,9 +250,6 @@ class SlickSeekerIntegrationSpec extends AnyWordSpec with Matchers with BeforeAn
 
       result.items.map(_.firstName) shouldBe Seq("Alice")
       result.total shouldBe 1
-      if (result.items.nonEmpty) {
-        result.items.head.firstName shouldBe "Alice"
-      }
     }
 
     "handle limit larger than total" in {
