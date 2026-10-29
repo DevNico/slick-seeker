@@ -2,7 +2,7 @@ package io.github.devnico.slickseeker.pagination
 
 import io.github.devnico.slickseeker.cursor._
 import io.github.devnico.slickseeker.filter.{ColumnSeekFilter, ColumnSeekFilterTypes, SeekerSortKey}
-import io.github.devnico.slickseeker.support.MyH2Profile
+import io.github.devnico.slickseeker.support.{MyH2Profile, SortDirection}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -103,6 +103,42 @@ class CustomFilterSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll 
         forward shouldBe expected
         backward shouldBe expected
         val compiled = CompiledSeekPage[Unit]((_: Unit) => seeker(items))(_.id)
+        walk(c => await(db.run(compiled.pageWithoutCount((), 3, c)))) shouldBe ((expected, expected))
+      }
+    }
+
+    "page them in compiled pages with bound cursor values if they support it" in {
+      val binding: SeekerSortKey[Option[String], Option[String], String] =
+        new SeekerSortKey[Option[String], Option[String], String] {
+          def mapCol(col: slick.lifted.ColumnOrdered[Option[String]]) = builtIn.mapCol(col)
+          def shape                                                   = builtIn.shape
+          def codec: CursorValueCodec[Option[String], String]         = builtIn.codec
+          override def typedType                                      = builtIn.typedType
+          def filter: ColumnSeekFilter[Option[String]] = new ColumnSeekFilter[Option[String]] {
+            def apply(
+                column: slick.lifted.ColumnOrdered[Option[String]],
+                value: Option[String],
+                prevCond: ColumnSeekFilterTypes.FilterCond
+            ) = builtIn.filter(column, value, prevCond)
+            override def applyParam(
+                column: slick.lifted.ColumnOrdered[Option[String]],
+                value: Rep[Option[String]],
+                valueIsNull: Boolean,
+                prevCond: ColumnSeekFilterTypes.FilterCond
+            ) = builtIn.filter.applyParam(column, value, valueIsNull, prevCond)
+          }
+        }
+      Seq[(SlickSeeker[Items, (Int, Option[String]), String, ?, ?], Query[Items, (Int, Option[String]), Seq])](
+        (items.toSeeker.seek(_.tag.asc)(binding).seek(_.id.asc), items.sortBy(r => (r.tag.asc, r.id.asc))),
+        (items.toSeeker.seek(_.tag.desc)(binding).seek(_.id.asc), items.sortBy(r => (r.tag.desc, r.id.asc))),
+        (
+          items.toSeeker.seek(_.tag)(binding).seek(_.id).seekDirection(SortDirection.Desc),
+          items.sortBy(r => (r.tag.desc, r.id.desc))
+        )
+      ).foreach { case (seeker, native) =>
+        val expected = await(db.run(native.map(_.id).result)).toVector
+        val compiled = CompiledSeekPage[Unit]((_: Unit) => seeker)(_.id)
+        compiled.maxForms shouldBe 5
         walk(c => await(db.run(compiled.pageWithoutCount((), 3, c)))) shouldBe ((expected, expected))
       }
     }

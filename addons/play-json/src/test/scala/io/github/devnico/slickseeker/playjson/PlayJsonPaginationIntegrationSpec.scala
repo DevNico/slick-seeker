@@ -216,10 +216,8 @@ class PlayJsonPaginationIntegrationSpec extends AnyWordSpec with Matchers with B
 
       val result = await(db.run(seeker.page(limit = 10, cursor = None)))
 
-      result.items.size should be <= 1
-      if (result.items.nonEmpty) {
-        result.items.head.firstName shouldBe "Alice"
-      }
+      result.items.map(_.firstName) shouldBe Seq("Alice")
+      result.total shouldBe 1
     }
 
     "handle limit larger than total" in {
