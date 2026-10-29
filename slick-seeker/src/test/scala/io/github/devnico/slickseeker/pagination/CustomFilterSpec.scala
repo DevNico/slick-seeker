@@ -51,12 +51,14 @@ class CustomFilterSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll 
       def mapCol(col: slick.lifted.ColumnOrdered[Option[String]]) = builtIn.mapCol(col)
       def shape                                                   = builtIn.shape
       def codec: CursorValueCodec[Option[String], String]         = builtIn.codec
+      def typedType                                               = builtIn.typedType
       def filter: ColumnSeekFilter[Option[String]] = new ColumnSeekFilter[Option[String]] {
         def apply(
             column: slick.lifted.ColumnOrdered[Option[String]],
-            value: Option[String],
+            value: Rep[Option[String]],
+            valueIsNull: Boolean,
             prevCond: ColumnSeekFilterTypes.FilterCond
-        ) = builtIn.filter(column, value, prevCond)
+        ) = builtIn.filter(column, value, valueIsNull, prevCond)
       }
     }
 
@@ -107,32 +109,12 @@ class CustomFilterSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll 
       }
     }
 
-    "page them in compiled pages with bound cursor values if they support it" in {
-      val binding: SeekerSortKey[Option[String], Option[String], String] =
-        new SeekerSortKey[Option[String], Option[String], String] {
-          def mapCol(col: slick.lifted.ColumnOrdered[Option[String]]) = builtIn.mapCol(col)
-          def shape                                                   = builtIn.shape
-          def codec: CursorValueCodec[Option[String], String]         = builtIn.codec
-          override def typedType                                      = builtIn.typedType
-          def filter: ColumnSeekFilter[Option[String]] = new ColumnSeekFilter[Option[String]] {
-            def apply(
-                column: slick.lifted.ColumnOrdered[Option[String]],
-                value: Option[String],
-                prevCond: ColumnSeekFilterTypes.FilterCond
-            ) = builtIn.filter(column, value, prevCond)
-            override def applyParam(
-                column: slick.lifted.ColumnOrdered[Option[String]],
-                value: Rep[Option[String]],
-                valueIsNull: Boolean,
-                prevCond: ColumnSeekFilterTypes.FilterCond
-            ) = builtIn.filter.applyParam(column, value, valueIsNull, prevCond)
-          }
-        }
+    "page them with seekDirection in compiled pages" in {
       Seq[(SlickSeeker[Items, (Int, Option[String]), String, ?, ?], Query[Items, (Int, Option[String]), Seq])](
-        (items.toSeeker.seek(_.tag.asc)(binding).seek(_.id.asc), items.sortBy(r => (r.tag.asc, r.id.asc))),
-        (items.toSeeker.seek(_.tag.desc)(binding).seek(_.id.asc), items.sortBy(r => (r.tag.desc, r.id.asc))),
+        (items.toSeeker.seek(_.tag.asc)(custom).seek(_.id.asc), items.sortBy(r => (r.tag.asc, r.id.asc))),
+        (items.toSeeker.seek(_.tag.desc)(custom).seek(_.id.asc), items.sortBy(r => (r.tag.desc, r.id.asc))),
         (
-          items.toSeeker.seek(_.tag)(binding).seek(_.id).seekDirection(SortDirection.Desc),
+          items.toSeeker.seek(_.tag)(custom).seek(_.id).seekDirection(SortDirection.Desc),
           items.sortBy(r => (r.tag.desc, r.id.desc))
         )
       ).foreach { case (seeker, native) =>
@@ -157,9 +139,14 @@ class CustomFilterSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll 
         def mapCol(col: slick.lifted.ColumnOrdered[Int]) = builtInId.mapCol(col)
         def shape                                        = builtInId.shape
         def codec: CursorValueCodec[Int, String]         = builtInId.codec
+        def typedType                                    = builtInId.typedType
         def filter: ColumnSeekFilter[Int] = new ColumnSeekFilter[Int] {
-          def apply(column: slick.lifted.ColumnOrdered[Int], value: Int, prevCond: ColumnSeekFilterTypes.FilterCond) =
-            builtInId.filter(column, value, prevCond)
+          def apply(
+              column: slick.lifted.ColumnOrdered[Int],
+              value: Rep[Int],
+              valueIsNull: Boolean,
+              prevCond: ColumnSeekFilterTypes.FilterCond
+          ) = builtInId.filter(column, value, valueIsNull, prevCond)
         }
       }
       val env     = implicitly[CursorEnvironment[String]]

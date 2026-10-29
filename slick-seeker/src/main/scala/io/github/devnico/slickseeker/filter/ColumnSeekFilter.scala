@@ -1,31 +1,25 @@
 package io.github.devnico.slickseeker.filter
 
-import slick.ast.TypedType
 import slick.lifted.{ColumnOrdered, Rep}
 
 object ColumnSeekFilterTypes {
   type FilterCond = Rep[Option[Boolean]]
 }
 
+/** The cursor condition of one seek column: which rows come after the cursor in the column's order. */
 trait ColumnSeekFilter[T] {
   import ColumnSeekFilterTypes._
-  def apply(column: ColumnOrdered[T], value: T, prevCond: FilterCond): FilterCond
 
-  /** Like [[apply]], with the cursor value bound as a query parameter; `valueIsNull` tells whether it is `None`.
-    * Optional: without it, compiled pages ([[io.github.devnico.slickseeker.pagination.CompiledSeekPage]]) run their
-    * cursor pages as ad-hoc pages.
+  /** The condition for rows after the cursor: `value` is this column's cursor value as a query parameter (`valueIsNull`
+    * tells whether it is `None`), `prevCond` the condition on the following seek columns, for rows equal to `value` in
+    * this one. `column.ord` is the order of the page (reversed on backward pages); on `Option` columns its nulls
+    * ordering is always explicit.
     */
-  def applyParam(column: ColumnOrdered[T], value: Rep[T], valueIsNull: Boolean, prevCond: FilterCond): FilterCond =
-    throw new NoCompiledPages(s"${getClass.getName} does not support compiled pages (no applyParam)")
+  def apply(column: ColumnOrdered[T], value: Rep[T], valueIsNull: Boolean, prevCond: FilterCond): FilterCond
 }
 
-/** Thrown by the default `applyParam` and `typedType`: compiled pages then run their cursor pages as ad-hoc pages. */
-final private[slickseeker] class NoCompiledPages(message: String) extends UnsupportedOperationException(message)
-
-/** A built-in filter: seekers bind its cursor values as parameters of `valueType` and call [[applyParam]]. */
-private[slickseeker] trait BuiltInSeekFilter[T] extends ColumnSeekFilter[T] {
-  def valueType: TypedType[T]
-}
+/** A built-in filter. */
+private[slickseeker] trait BuiltInSeekFilter[T] extends ColumnSeekFilter[T]
 
 /** The built-in filter on a non-null column: its conditions over several columns of one direction equal a row value
   * comparison `(a, b) > (x, y)`, which seekers use instead where the profile supports it.

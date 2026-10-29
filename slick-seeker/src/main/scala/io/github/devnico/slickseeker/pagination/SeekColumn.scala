@@ -2,7 +2,6 @@ package io.github.devnico.slickseeker.pagination
 
 import io.github.devnico.slickseeker.cursor.CursorValueCodec
 import io.github.devnico.slickseeker.filter.{
-  BuiltInSeekFilter,
   ColumnSeekFilter,
   ColumnSeekFilterTypes,
   NullableSeekFilter,
@@ -68,8 +67,8 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
     }
   }
 
-  /** Built-in filters get the cursor value bound as `settings` say; custom ones get the value. `table` is an element of
-    * the seeker's query `base`.
+  /** The filter of this column with the cursor value bound as `settings` say. `table` is an element of the seeker's
+    * query `base`.
     */
   def appendToFilter(
       table: E,
@@ -82,12 +81,13 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
       .decode(cursor)
       .map { value =>
         val columnOrdered = this.col(table)
-        filter match {
-          case builtIn: BuiltInSeekFilter[Column @unchecked] =>
-            val bound = comparable(table, base, settings.bind(value, builtIn.valueType), builtIn.valueType, settings)
-            builtIn.applyParam(columnOrdered, bound, value == None, prevCond)
-          case custom => custom(columnOrdered, value, prevCond)
-        }
+        val tpe           = typedType()
+        filter(
+          columnOrdered,
+          comparable(table, base, settings.bind(value, tpe), tpe, settings),
+          value == None,
+          prevCond
+        )
       }
 
   /** `value`, a cursor value of `tpe` bound for this column of `table`, as it compares with the column's values (see
@@ -126,14 +126,9 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
   /** Whether this column can be null: an `Option` column, unless its filter is the built-in non-null one. */
   def nullable(ordered: ColumnOrdered[?]): Boolean = !nonNull && isOption(ordered)
 
-  /** Whether `ordered` sorts an `Option` column or expression: after its sort key's type, else its own. */
-  def isOption(ordered: ColumnOrdered[?]): Boolean = {
-    val tpe = scala.util.Try(typedType()).toOption.orElse(ordered.column match {
-      case typed: Rep.TypedRep[?] => Some(typed.tpe)
-      case other                  => scala.util.Try(other.toNode.nodeType).toOption
-    })
-    tpe.exists(_.isInstanceOf[OptionType])
-  }
+  /** Whether `ordered` sorts an `Option` column or expression (after its sort key's type). */
+  def isOption(ordered: ColumnOrdered[?]): Boolean =
+    typedType().isInstanceOf[OptionType]
 
   /** Whether this column can be part of a row value comparison (see [[RowComparableSeekFilter]]). */
   def rowComparable: Boolean = filter.isInstanceOf[RowComparableSeekFilter[?]]
@@ -145,10 +140,9 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
 
   /** The decoded cursor value as a parameter of a row value comparison, if this column can be part of one. */
   def rowValue(table: E, base: Node, cursor: CVE, settings: SeekSettings): Option[Node] = filter match {
-    case f: RowComparableSeekFilter[Column @unchecked] =>
-      codec.decode(cursor).map(v =>
-        comparable(table, base, settings.bind(v, f.valueType), f.valueType, settings).toNode
-      )
+    case _: RowComparableSeekFilter[?] =>
+      val tpe = typedType()
+      codec.decode(cursor).map(v => comparable(table, base, settings.bind(v, tpe), tpe, settings).toNode)
     case _ => None
   }
 
@@ -161,7 +155,7 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
       prevCond: FilterCond,
       settings: SeekSettings
   ): FilterCond =
-    filter.applyParam(this.col(table), comparable(table, base, value, typedType(), settings), valueIsNull, prevCond)
+    filter(this.col(table), comparable(table, base, value, typedType(), settings), valueIsNull, prevCond)
 }
 
 private[slickseeker] object SeekColumn {

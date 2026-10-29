@@ -10,11 +10,8 @@ trait SeekerSortKey[T, K, CVE] {
   def filter: ColumnSeekFilter[K]
   def codec: CursorValueCodec[K, CVE]
 
-  /** The type of the sort key, to bind cursor values as query parameters ([[pagination.CompiledSeekPage]]). Optional:
-    * without it, compiled pages run their cursor pages as ad-hoc pages.
-    */
-  def typedType: TypedType[K] =
-    throw new NoCompiledPages(s"${getClass.getName} does not support compiled pages (no typedType)")
+  /** The type of the sort key, to bind cursor values as query parameters. */
+  def typedType: TypedType[K]
 }
 
 // Note: SeekerSortKey implicits are provided by SlickSeekerSupport trait
