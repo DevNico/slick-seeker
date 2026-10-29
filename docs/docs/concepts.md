@@ -327,7 +327,8 @@ byMinAge.pageWithoutCount(params = 30, limit = 20, cursor = None)   // or .page(
   compiled in. Optional filters need either one `CompiledSeekPage` per combination or SQL-side handling
   (`p.isEmpty || …`).
 - Each form of the page query is compiled once: the first page and, for forward and backward pages, one per
-  combination of `None` values in nullable cursor columns (`maxForms` = 1 + 2 × 2^nullable columns).
+  combination of `None` values in nullable cursor columns (`maxForms` = 1 + 2 × 2^nullable columns, or 1 where
+  cursor pages run as ad-hoc pages).
 - Items and cursors are the same as those of `pageWithoutCountAs` / `pageAs` for every cursor the seeker produced,
   including row value comparisons. A cursor that can't be decoded at all fails like it does for the ad-hoc seeker;
   one whose values don't decode or don't fit the cursor columns gives the first page (the ad-hoc seeker then pages

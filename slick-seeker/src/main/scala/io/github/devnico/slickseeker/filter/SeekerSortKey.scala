@@ -14,7 +14,7 @@ trait SeekerSortKey[T, K, CVE] {
     * without it, compiled pages run their cursor pages as ad-hoc pages.
     */
   def typedType: TypedType[K] =
-    throw new UnsupportedOperationException(s"${getClass.getName} does not support compiled pages (no typedType)")
+    throw new NoCompiledPages(s"${getClass.getName} does not support compiled pages (no typedType)")
 }
 
 // Note: SeekerSortKey implicits are provided by SlickSeekerSupport trait
