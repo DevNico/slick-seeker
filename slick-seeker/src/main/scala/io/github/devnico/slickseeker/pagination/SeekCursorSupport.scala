@@ -62,11 +62,23 @@ final private[slickseeker] case class SeekCursorSupport[E, U, CVE, C, CU](
   /** Whether the [[decodeParams]] values all have their column's type, so they can be bound as parameters (cursor value
     * codecs are not checked to decode their type). Needs the sort keys' `typedType`.
     */
-  def bindable(params: Any): Boolean =
+  def bindable(params: Any): Boolean = mistyped(params).isEmpty
+
+  /** The first [[decodeParams]] value (last column first) that doesn't have its column's type, described. */
+  def mistyped(params: Any): Option[String] =
     columns.reverseIterator
-      .foldLeft[(Boolean, Any)]((true, params)) {
-        case ((ok, (value, tail)), column) => (ok && SeekSettings.hasType(value, column.typedType()), tail)
-        case (acc, _)                      => acc
+      .foldLeft[(Option[String], Any)]((None, params)) {
+        case ((found, (value, tail)), column) =>
+          val tpe = column.typedType()
+          (
+            found.orElse(
+              Option.when(!SeekSettings.hasType(value, tpe))(
+                s"the cursor value codec of a ${SeekSettings.describe(tpe)} column decoded ${value.getClass.getName}"
+              )
+            ),
+            tail
+          )
+        case (acc, _) => acc
       }
       ._1
 

@@ -42,17 +42,28 @@ import scala.concurrent.ExecutionContext
   * [[io.github.devnico.slickseeker.filter.ColumnSeekFilter.applyParam]], and for cursor values a codec decoded as
   * another type than the column's.
   *
+  * [[CompiledSeekPage.strict]] creates one that never runs ad-hoc pages: it fails on creation if a sort key or filter
+  * can't bind cursor values, and on a page whose cursor value a codec decoded as another type.
+  *
   * The seeker needs at least one seek column.
   */
 final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     build: A => SlickSeeker[E, U, CVE, Any, Any],
     select: E => P,
-    defaultMaxLimit: Int
+    defaultMaxLimit: Int,
+    strict: Boolean
 )(implicit
     appShape: Shape[ColumnsShapeLevel, AU, AU, A],
     selectShape: Shape[FlatShapeLevel, P, PU, P],
     profile: JdbcProfile
 ) {
+  private[pagination] def this(build: A => SlickSeeker[E, U, CVE, Any, Any], select: E => P, defaultMaxLimit: Int)(
+      implicit
+      appShape: Shape[ColumnsShapeLevel, AU, AU, A],
+      selectShape: Shape[FlatShapeLevel, P, PU, P],
+      profile: JdbcProfile
+  ) = this(build, select, defaultMaxLimit, strict = false)
+
   // The cursor's types (C, CU) grow with every `seek` and can't be named here, so they are erased to `Any`. The casts
   // below are safe because cursor shapes, parameters and decoded values all come from the same seeker structure.
   private type Rows      = Seq[(PU, Any)]
@@ -88,7 +99,11 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
           settings
         )(select)
         true
-      } catch { case _: NoCompiledPages => false }
+      } catch {
+        case e: NoCompiledPages if strict =>
+          throw new IllegalArgumentException(s"CompiledSeekPage.strict: ${e.getMessage}", e)
+        case _: NoCompiledPages => false
+      }
     (structure.cursorSupport, binds)
   }
 
@@ -177,8 +192,13 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
       cursorSupport.decodeParams(values).map(cursorValues => (direction == CursorDirection.Backward, cursorValues))
     } match {
       case None => compiledPage(None)
-      case Some(cursorValues @ (_, values)) if bindsCursorValues && cursorSupport.bindable(values) =>
-        compiledPage(Some(cursorValues))
+      case Some(cursorValues @ (_, values)) if bindsCursorValues =>
+        cursorSupport.mistyped(values) match {
+          case None => compiledPage(Some(cursorValues))
+          case Some(problem) if strict =>
+            throw new IllegalArgumentException(s"CompiledSeekPage.strict: $problem, which can't be bound")
+          case Some(_) => adHocPage(params, limit, cursor, maxLimit)
+        }
       case Some(_) => adHocPage(params, limit, cursor, maxLimit)
     }
   }
@@ -209,17 +229,36 @@ object CompiledSeekPage {
     */
   def apply[AU]: Builder[AU] = new Builder[AU]
 
-  final class Builder[AU] {
+  /** Like [[apply]], for a `CompiledSeekPage` whose pages are always compiled queries with bound parameters: creating
+    * it throws `IllegalArgumentException` if a sort key has no `typedType` or a filter no `applyParam` (custom ones may
+    * not), and a page throws it for a cursor value a codec decoded as another type than the column's. The default runs
+    * those pages as ad-hoc pages instead.
+    * {{{
+    * val byMinAge = CompiledSeekPage.strict[Int]((minAge: ConstColumn[Int]) =>
+    *   persons.filter(_.age >= minAge).toSeeker.seek(_.lastName.desc.nullsLast).seek(_.id.asc)
+    * )(_.id)
+    * }}}
+    */
+  def strict[AU]: Builder[AU] = new Builder[AU](strict = true)
+
+  final class Builder[AU] private[pagination] (strict: Boolean) {
+    def this() = this(strict = false)
+
     def apply[A, E, U, CVE](build: A => SlickSeeker[E, U, CVE, ?, ?]): Selecting[AU, A, E, U, CVE] =
-      new Selecting(build.asInstanceOf[A => SlickSeeker[E, U, CVE, Any, Any]])
+      new Selecting(build.asInstanceOf[A => SlickSeeker[E, U, CVE, Any, Any]], strict)
   }
 
-  final class Selecting[AU, A, E, U, CVE](build: A => SlickSeeker[E, U, CVE, Any, Any]) {
+  final class Selecting[AU, A, E, U, CVE] private[pagination] (
+      build: A => SlickSeeker[E, U, CVE, Any, Any],
+      strict: Boolean
+  ) {
+    def this(build: A => SlickSeeker[E, U, CVE, Any, Any]) = this(build, strict = false)
+
     def apply[P, PU](select: E => P, maxLimit: Int = 100)(implicit
         appShape: Shape[ColumnsShapeLevel, AU, AU, A],
         selectShape: Shape[FlatShapeLevel, P, PU, P],
         profile: JdbcProfile
     ): CompiledSeekPage[A, AU, E, U, CVE, P, PU] =
-      new CompiledSeekPage(build, select, maxLimit)
+      new CompiledSeekPage(build, select, maxLimit, strict)
   }
 }
