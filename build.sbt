@@ -77,20 +77,6 @@ lazy val core = (project in file("slick-seeker"))
   .settings(
     commonSettings,
     name := "slick-seeker",
-      ProblemFilters.exclude[DirectMissingMethodProblem]("io.github.devnico.slickseeker.filter.ColumnSeekFilter.apply"),
-      ProblemFilters.exclude[ReversedMissingMethodProblem](
-        "io.github.devnico.slickseeker.filter.ColumnSeekFilter.apply"
-      ),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "io.github.devnico.slickseeker.filter.ColumnSeekFilter.applyParam"
-      ),
-      ProblemFilters.exclude[DirectMissingMethodProblem]("io.github.devnico.slickseeker.filter.SeekerSortKey.$init$"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "io.github.devnico.slickseeker.filter.SeekerSortKey.typedType"
-      ),
-      ProblemFilters.exclude[MissingClassProblem]("io.github.devnico.slickseeker.filter.NoCompiledPages"),
-      ProblemFilters.exclude[MissingClassProblem]("io.github.devnico.slickseeker.filter.BuiltInSeekFilter")
-    ),
     libraryDependencies ++= Seq(
       "com.typesafe.slick" %% "slick"       % slickVersion,
       "com.h2database"      % "h2"          % "2.4.240"  % Test,
