@@ -836,11 +836,10 @@
 <p>Cursor values are bound as parameters of the column's type, so they compare exactly like the column's own values
 (a <code>REAL</code> column's <code>0.1f</code> equals its cursor value, which the literal <code>0.1</code> would not). Cursor value codecs should
 therefore decode the column's type; values of another type are written as literals, as in earlier versions.
-Floating-point seek columns stay fragile where the driver sends parameters as text (MariaDB Connector/J by default,
-see <a href="#supported-databases">Supported Databases</a>); prefer <code>DECIMAL</code> columns or another seek column there.</p>
+Floating-point seek columns stay fragile where the driver sends parameters as text (MySQL's and MariaDB's drivers by
+default, see below and <a href="#supported-databases">Supported Databases</a>); prefer <code>DECIMAL</code> columns where you can.</p>
 <ul>
-<li>
-<p>On SQL Server, a cursor value only compares like its column sorts if it has the column's type, and the driver
+<li>On SQL Server, a cursor value only compares like its column sorts if it has the column's type, and the driver
   binds strings as <code>nvarchar</code> and timestamps as <code>datetime2</code>. Seekers therefore cast cursor values of string
   columns to <code>VARCHAR(MAX)</code> or <code>NVARCHAR(MAX)</code> and of <code>DATETIME</code> / <code>SMALLDATETIME</code> columns to their type, after the
   column's declared type: its <code>O.SqlType</code>, else the type Slick's DDL gives it (<code>VARCHAR</code> for strings,
@@ -849,7 +848,20 @@ see <a href="#supported-databases">Supported Databases</a>); prefer <code>DECIMA
   An expression gets the declared type of its columns of the same type (<code>_.name.toLowerCase</code>: <code>name</code>'s). Values of
   an expression over columns of different declared types, or of a column of a query the seeker can't follow to its
   table, are not cast: they compare as the driver binds them (<code>nvarchar</code>, <code>datetime2</code>).
-  Override <code>seekerCursorValueCast</code> in your profile to change the casts.</p>
+  Override <code>seekerCursorValueCast</code> in your profile to change the casts.</li>
+<li>
+<p>On SQL Server, cursor columns are selected as expressions, and so are columns the items select more than once
+  (<code>pageAs(t =&gt; (t.id, t.id))</code>): SQL Server resolves <code>order by "id"</code> against the selected columns and fails with
+  "Ambiguous column name" if one is selected twice.</p>
+</li>
+<li>
+<p>On MySQL and MariaDB, the drivers send <code>Float</code> parameters as text by default, and <code>0.1</code> as a <code>DOUBLE</code> never equals
+  a single-precision <code>FLOAT</code> column's <code>0.1f</code>; they also send <code>FLOAT</code> values as text with 6 significant digits.
+  Seekers therefore cast cursor values of <code>FLOAT</code> columns (declared with <code>O.SqlType("FLOAT")</code>, or <code>FLOAT(p)</code> up to
+  <code>p</code> = 24) to <code>FLOAT</code> and select the column as <code>DOUBLE</code> for the cursor, which needs MySQL 8.0.17+ or MariaDB
+  10.4.5+. Slick's DDL declares <code>Float</code> as <code>REAL</code>, which is <code>DOUBLE</code> there: not cast (see the MariaDB limitation in
+  <a href="#supported-databases">Supported Databases</a>). On MySQL, <code>seekerCursorValueCast</code> types are written as
+  <code>CAST(? AS type)</code>, so they must be types MySQL's <code>CAST</code> takes.</p>
 </li>
 <li>
 <p>On PostgreSQL, string-backed cursor values (<code>String</code> and types mapped to <code>String</code>) are bound untyped, as literals
@@ -1063,13 +1075,13 @@ return each row exactly once in the database's own order.</p>
 <td>MySQL</td>
 <td>8.4 (Connector/J 9)</td>
 <td><code>MySQLProfile</code></td>
-<td></td>
+<td><code>FLOAT</code> <a href="#cursor-values-as-parameters">casts</a> (8.0.17+)</td>
 </tr>
 <tr>
 <td>MariaDB</td>
 <td>11.4 (MariaDB Connector/J 3.5)</td>
 <td><code>MySQLProfile</code></td>
-<td>See floating-point columns below</td>
+<td><code>FLOAT</code> <a href="#cursor-values-as-parameters">casts</a> (10.4.5+); see <code>REAL</code> columns below</td>
 </tr>
 <tr>
 <td>SQL Server</td>
@@ -1096,14 +1108,22 @@ return each row exactly once in the database's own order.</p>
 <code>postgresql</code>, <code>mysql</code>, <code>mariadb</code>, <code>sqlserver</code>, <code>oracle</code>, <code>cockroachdb</code>, or <code>all</code>).</p>
 <p>Known limitations:</p>
 <ul>
-<li><strong>MariaDB, floating-point seek columns</strong>: MariaDB Connector/J sends parameters as text by default, so a cursor
-  value <code>0.1</code> never equals the <code>REAL</code> value <code>0.1f</code> it came from and pages repeat. Connect with
-  <code>useServerPrepStmts=true</code>, or seek on <code>DECIMAL</code> columns. MySQL with Connector/J pages them correctly.</li>
+<li><strong>MariaDB, <code>Float</code> in <code>REAL</code> / <code>DOUBLE</code> columns</strong> (Slick's default DDL for <code>Float</code>): MariaDB Connector/J's batch
+  inserts store <code>0.1f</code> as <code>0.10000000149…</code>, its single inserts and text parameters as <code>0.1</code>, so the same column can
+  hold both and the <code>Float</code> cursor value can't tell which one its row has: pages repeat. No cast fixes both.
+  Declare such columns <code>FLOAT</code> (<code>O.SqlType("FLOAT")</code>, <a href="#cursor-values-as-parameters">cast</a>) or <code>DECIMAL</code>, map them to
+  <code>Double</code>, or connect with <code>useServerPrepStmts=true</code> (binary parameters, as batches send them). MySQL's
+  Connector/J sends them as text everywhere, so they page correctly there.</li>
 <li><strong>SQL Server, <code>sendStringParametersAsUnicode=false</code></strong>: <code>varchar</code> and <code>datetime</code> columns still page correctly, but
   <code>nvarchar</code> values outside the database's code page are lost before any cast: keep the default (<code>true</code>). The same
   goes for a <code>varchar</code> column whose collation has another code page than the database default.
   <code>datetimeParameterType=datetime</code> loses <code>datetime2</code> precision the same way.</li>
 <li><strong>SQL Server, <code>text</code> / <code>ntext</code></strong> columns can't be sorted, so they can't be seek columns.</li>
+<li><strong>MySQL / MariaDB, arithmetic over <code>FLOAT</code> columns</strong> (e.g. <code>t.f + 0.1f</code> as a seek column): MySQL computes it as
+  <code>DOUBLE</code>, which a <code>Float</code> cursor value can't match exactly, so pages repeat. Seek on the <code>FLOAT</code> column itself, or
+  map the expression to <code>Double</code> (<code>t.f.asColumnOf[Double] + 0.1</code>).</li>
+<li><strong>SQL Server, the same whole row selected twice</strong> (<code>pageAs(t =&gt; (t, t))</code>) still fails with <code>Ambiguous column
+  name</code>. Repeated single columns (<code>(t.id, t.id)</code>, <code>(t, t.id)</code>) work.</li>
 <li><strong>MySQL / MariaDB, row value comparisons</strong> are off: they don't use an index range for them (see
   <a href="#row-value-comparisons">Row Value Comparisons</a>).</li>
 </ul>
