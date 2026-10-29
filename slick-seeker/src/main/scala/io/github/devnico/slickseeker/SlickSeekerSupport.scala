@@ -282,6 +282,7 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
         *   - All columns must be non-nullable (Option[T] will fail at compile time)
         *   - All columns must be ASC (enforced by type parameter)
         */
+      @deprecated("toSeeker compares the same columns as a row value: use toSeeker.seek(_.col.asc)", "0.7.2")
       def toPgTupleSeekerAsc[CVE](implicit
           cursorEnvironment: CursorEnvironment[CVE],
           shape: lifted.Shape[lifted.FlatShapeLevel, E, U, E],
@@ -300,6 +301,7 @@ trait SlickSeekerSupport { driver: JdbcProfile =>
         *   - All columns must be non-nullable (Option[T] will fail at compile time)
         *   - All columns must be DESC (enforced by type parameter)
         */
+      @deprecated("toSeeker compares the same columns as a row value: use toSeeker.seek(_.col.desc)", "0.7.2")
       def toPgTupleSeekerDesc[CVE](implicit
           cursorEnvironment: CursorEnvironment[CVE],
           shape: lifted.Shape[lifted.FlatShapeLevel, E, U, E],

@@ -8,7 +8,7 @@ import io.github.devnico.slickseeker.filter.{
   NullableSeekFilter,
   RowComparableSeekFilter
 }
-import slick.ast.{Node, Ordering, TypedType}
+import slick.ast.{Node, OptionType, Ordering, TypedType}
 import slick.lifted.{ColumnOrdered, Rep}
 
 private[slickseeker] trait SeekColumn[E, U, CVE] {
@@ -31,7 +31,7 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         val newDir =
           if (direction == io.github.devnico.slickseeker.support.SortDirection.Asc) Ordering.Asc else Ordering.Desc
         val finalNulls =
-          if (current.ord.nulls == Ordering.NullsDefault && self.nonNull) Ordering.NullsDefault
+          if (current.ord.nulls == Ordering.NullsDefault && !self.nullable(current)) Ordering.NullsDefault
           else if (current.ord.nulls != Ordering.NullsDefault) {
             // Reversing the direction mirrors the nulls; keeping it keeps them
             if (current.ord.direction == newDir) current.ord.nulls
@@ -58,13 +58,13 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         val newCol      = originalCol.reverse
 
         (originalCol.ord.direction, originalCol.ord.nulls) match {
-          case (_, Ordering.NullsDefault) if self.nonNull => newCol
-          case (Ordering.Asc, Ordering.NullsFirst)        => newCol.nullsLast
-          case (Ordering.Asc, Ordering.NullsLast)         => newCol.nullsFirst
-          case (Ordering.Asc, Ordering.NullsDefault)      => newCol.nullsFirst
-          case (Ordering.Desc, Ordering.NullsFirst)       => newCol.nullsLast
-          case (Ordering.Desc, Ordering.NullsLast)        => newCol.nullsFirst
-          case (Ordering.Desc, Ordering.NullsDefault)     => newCol.nullsLast
+          case (_, Ordering.NullsDefault) if !self.nullable(originalCol) => newCol
+          case (Ordering.Asc, Ordering.NullsFirst)                       => newCol.nullsLast
+          case (Ordering.Asc, Ordering.NullsLast)                        => newCol.nullsFirst
+          case (Ordering.Asc, Ordering.NullsDefault)                     => newCol.nullsFirst
+          case (Ordering.Desc, Ordering.NullsFirst)                      => newCol.nullsLast
+          case (Ordering.Desc, Ordering.NullsLast)                       => newCol.nullsFirst
+          case (Ordering.Desc, Ordering.NullsDefault)                    => newCol.nullsLast
         }
       }
       val filter    = self.filter
@@ -106,24 +106,38 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
       tpe.asInstanceOf[TypedType[Column]]
     )
 
-  /** This column with a missing nulls ordering resolved to the database's default where its filter needs one (see
-    * [[NullableSeekFilter]]); applied before [[reversed]], which mirrors it.
+  /** This column with a missing nulls ordering resolved to the database's default where its filter needs one: the
+    * built-in filter of `Option` columns (see [[NullableSeekFilter]]) and custom filters of `Option` columns, which
+    * can't tell where the database puts nulls otherwise. Applied before [[reversed]], which mirrors it.
     */
   def withDefaultNulls(settings: SeekSettings): SeekColumn[E, U, CVE] = filter match {
-    case _: NullableSeekFilter[?] =>
-      val self = this
+    case _: RowComparableSeekFilter[?] => this
+    case other =>
+      val self          = this
+      val builtInOption = other.isInstanceOf[NullableSeekFilter[?]]
       new SeekColumn[E, U, CVE] {
         type Column = self.Column
         val col: E => ColumnOrdered[Column] = { table =>
           val ordered = self.col(table)
-          if (ordered.ord.nulls != Ordering.NullsDefault) ordered
+          if (ordered.ord.nulls != Ordering.NullsDefault || !(builtInOption || self.isOption(ordered))) ordered
           else ordered.copy(ord = ordered.ord.copy(nulls = settings.defaultNulls(ordered.ord.direction)))
         }
         val filter    = self.filter
         val codec     = self.codec
         val typedType = self.typedType
       }
-    case _ => this
+  }
+
+  /** Whether this column can be null: an `Option` column, unless its filter is the built-in non-null one. */
+  def nullable(ordered: ColumnOrdered[?]): Boolean = !nonNull && isOption(ordered)
+
+  /** Whether `ordered` sorts an `Option` column or expression: after its sort key's type, else its own. */
+  def isOption(ordered: ColumnOrdered[?]): Boolean = {
+    val tpe = scala.util.Try(typedType()).toOption.orElse(ordered.column match {
+      case typed: Rep.TypedRep[?] => Some(typed.tpe)
+      case other                  => scala.util.Try(other.toNode.nodeType).toOption
+    })
+    tpe.exists(_.isInstanceOf[OptionType])
   }
 
   /** Whether this column can be part of a row value comparison (see [[RowComparableSeekFilter]]). */
