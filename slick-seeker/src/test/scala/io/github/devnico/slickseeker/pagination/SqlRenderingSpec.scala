@@ -131,10 +131,10 @@ class SqlRenderingSpec extends AnyWordSpec with Matchers with SlickEquals {
 
     "cast MySQL's single-precision FLOAT cursor values to FLOAT, written as CAST" in {
       def cast(sqlType: String) = SlickSeekerSupport.defaultCursorValueCast(MySQLProfile, sqlType)
-      Seq("FLOAT", "float", "FLOAT(24)", "float(10)", "FLOAT(7,4)", "FLOAT UNSIGNED", "FLOAT NOT NULL").map(
+      Seq("FLOAT", "float", "FLOAT4", "FLOAT(24)", "float(10)", "FLOAT(7,4)", "FLOAT UNSIGNED", "FLOAT NOT NULL").map(
         cast
       ) shouldBe
-        Seq.fill(7)(Some("FLOAT"))
+        Seq.fill(8)(Some("FLOAT"))
       // REAL (Slick's type for Float) and FLOAT(25) to FLOAT(53) are DOUBLE on MySQL
       Seq("REAL", "DOUBLE", "DOUBLE PRECISION", "FLOAT(25)", "FLOAT(53)", "DECIMAL(10,2)", "VARCHAR(40)").map(
         cast

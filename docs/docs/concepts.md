@@ -290,6 +290,11 @@ Known limitations:
   goes for a `varchar` column whose collation has another code page than the database default.
   `datetimeParameterType=datetime` loses `datetime2` precision the same way.
 - **SQL Server, `text` / `ntext`** columns can't be sorted, so they can't be seek columns.
+- **MySQL / MariaDB, arithmetic over `FLOAT` columns** (e.g. `t.f + 0.1f` as a seek column): MySQL computes it as
+  `DOUBLE`, which a `Float` cursor value can't match exactly, so pages repeat. Seek on the `FLOAT` column itself, or
+  map the expression to `Double` (`t.f.asColumnOf[Double] + 0.1`).
+- **SQL Server, the same whole row selected twice** (`pageAs(t => (t, t))`) still fails with `Ambiguous column
+  name`. Repeated single columns (`(t.id, t.id)`, `(t, t.id)`) work.
 - **MySQL / MariaDB, row value comparisons** are off: they don't use an index range for them (see
   [Row Value Comparisons](#row-value-comparisons)).
 

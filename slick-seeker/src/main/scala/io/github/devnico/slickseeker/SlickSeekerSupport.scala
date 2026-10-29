@@ -346,8 +346,8 @@ object SlickSeekerSupport {
   private val sqlServerString         = "(?i)\\s*(varchar|char|character)\\b.*".r
   private val sqlServerDatetime       = "(?i)\\s*(datetime|smalldatetime)\\b.*".r
 
-  // FLOAT, FLOAT(p) with p up to 24 and FLOAT(M,D): single precision (FLOAT(25) to FLOAT(53) are DOUBLE)
-  private val mySqlFloat = "(?i)\\s*float\\b(?:\\s*\\(\\s*(\\d+)\\s*(,[^)]*)?\\))?.*".r
+  // FLOAT (or FLOAT4), FLOAT(p) with p up to 24 and FLOAT(M,D): single precision (FLOAT(25) to FLOAT(53) are DOUBLE)
+  private val mySqlFloat = "(?i)\\s*float4?\\b(?:\\s*\\(\\s*(\\d+)\\s*(,[^)]*)?\\))?.*".r
 
   private[slickseeker] def defaultCursorValueCast(profile: JdbcProfile, sqlType: String): Option[String] =
     profile match {
