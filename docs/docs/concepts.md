@@ -255,6 +255,40 @@ ORDER BY
   END ASC
 ```
 
+## Custom Filters and Sort Keys
+
+A `SeekerSortKey` maps a seek column to the value the seeker sorts and pages by; its `filter` gives the cursor
+condition for that value. The built-in ones cover plain columns, `Option` columns and `SeekOrder`s. A custom one
+implements every member, so the compiler checks it can do what seekers and compiled pages need:
+
+```scala
+val byLength: SeekerSortKey[String, Int, String] = new SeekerSortKey[String, Int, String] {
+  private val ints = MyProfile.api.seekerSortKeyIdentity[Int, String]
+  def mapCol(col: ColumnOrdered[String]): ColumnOrdered[Int] = ColumnOrdered(col.column.length, col.ord)
+  def shape     = ints.shape
+  def codec     = ints.codec
+  def typedType = ints.typedType   // binds cursor values as parameters
+  def filter = new ColumnSeekFilter[Int] {
+    // `value` is the cursor value as a query parameter; `valueIsNull` whether it is None (Option columns)
+    def apply(column: ColumnOrdered[Int], value: Rep[Int], valueIsNull: Boolean, prevCond: FilterCond) =
+      if (column.ord.direction == Ordering.Asc) column.column > value || (column.column === value && prevCond)
+      else column.column < value || (column.column === value && prevCond)
+  }
+}
+
+users.toSeeker.seek(_.name.asc)(byLength).seek(_.id.asc)
+```
+
+`column.ord` is the page's order (reversed on backward pages). On `Option` columns its nulls ordering is always
+explicit (the database's default if the seek column has none), so a filter can rely on it. Whether a sort key is an
+`Option` comes from its `typedType`, so that must match the type of the column `mapCol` gives.
+
+Before 0.8.0, `typedType` and a second method taking a bound value (`applyParam`) were optional, and `apply` took the
+cursor value itself. Implement `typedType`, and move the condition into the `apply` taking a `Rep`: a custom key or
+filter without them no longer compiles. Code calling a built-in filter directly passes the value as a `Rep` too:
+`filter(column, LiteralColumn(value), valueIsNull = false, prevCond)`. A codec decoding `Some(null)` now fails the page
+(`IllegalArgumentException`) instead of returning no rows.
+
 ## Supported Databases
 
 CI tests against these databases: many seeker configurations paged forward and backward, ad-hoc and compiled, must
@@ -342,15 +376,15 @@ byMinAge.pageWithoutCount(params = 30, limit = 20, cursor = None)   // or .page(
   compiled in. Optional filters need either one `CompiledSeekPage` per combination or SQL-side handling
   (`p.isEmpty || …`).
 - Each form of the page query is compiled once: the first page and, for forward and backward pages, one per
-  combination of `None` values in nullable cursor columns (`maxForms` = 1 + 2 × 2^nullable columns, or 1 where
-  cursor pages run as ad-hoc pages).
+  combination of `None` values in nullable cursor columns (`maxForms` = 1 + 2 × 2^nullable columns).
 - Items and cursors are the same as those of `pageWithoutCountAs` / `pageAs` for every cursor the seeker produced,
   including row value comparisons. A cursor that can't be decoded at all fails like it does for the ad-hoc seeker;
   one whose values don't decode or don't fit the cursor columns gives the first page (the ad-hoc seeker then pages
   without a cursor filter, or with one on the leading columns if there are fewer values than columns).
-- Cursor pages bind cursor values as parameters. Where they can't, they run as ad-hoc pages (same items and cursors,
-  compiled per page): for custom `SeekerSortKey`s without `typedType` or `ColumnSeekFilter`s without `applyParam`,
-  and for cursor values a codec decoded as another type than the column's.
+- Every page is a compiled query, for every seeker: sort keys and filters, built-in or
+  [custom](#custom-filters-and-sort-keys), always bind cursor values. A cursor value a codec decoded as another type
+  than its column's (through an unchecked cast, or `null`) can't be bound: the page throws
+  `IllegalArgumentException` (`page` before its count runs).
 - Generic plans: see [Cursor Values as Parameters](#cursor-values-as-parameters).
 - The seeker needs at least one seek column.
 - `SlickPgTupleSeeker` (deprecated) is not supported; `toSeeker` seekers use row value comparisons where they

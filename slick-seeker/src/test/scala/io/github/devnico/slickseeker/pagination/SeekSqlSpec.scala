@@ -114,7 +114,7 @@ class SeekSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
       )
     }
 
-    "write cursor values a codec decoded as another type than the column's as literals" in {
+    "write cursor values a codec decoded as another type than the column's as literals in ad-hoc pages" in {
       // Decodes Long for an Int column (unchecked): bound as a parameter, it would fail
       val mistyped: CursorValueCodec[Int, String] = new CursorValueCodec[Int, String] {
         def encode(value: Int): String         = value.toString
@@ -131,13 +131,32 @@ class SeekSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
       )
       lastSql(page(first.nextCursor)) should include("""("name", "id") > (?, 1)""")
 
+      // Compiled pages can't bind such values: they fail, before the count runs
       val compiled = CompiledSeekPage[Unit]((_: Unit) => items.toSeeker.seek(_.name.asc).seek(_.id.asc)(byId))(_.id)
-      await(db.run(compiled.pageWithoutCount((), 4, first.nextCursor))) shouldBe page(first.nextCursor)
-      // Such pages run as ad-hoc pages, with the application parameters still bound
-      val fromId = CompiledSeekPage[Int]((min: ConstColumn[Int]) =>
-        items.filter(_.id >= min).toSeeker.seek(_.name.asc).seek(_.id.asc)(byId)
-      )(_.id)
-      lastSql(await(db.run(fromId.pageWithoutCount(2, 4, first.nextCursor)))) should include(""""id" >= ?""")
+      await(db.run(compiled.pageWithoutCount((), 4, None))) shouldBe first
+      val error = the[IllegalArgumentException] thrownBy compiled.pageWithoutCount((), 4, first.nextCursor)
+      error.getMessage shouldBe "CompiledSeekPage: the cursor value codec of a column of type int decoded " +
+        "java.lang.Long, which can't be bound"
+      an[IllegalArgumentException] should be thrownBy compiled.page((), 4, first.nextCursor)
+
+      // Codecs decoding null: described, not a NullPointerException
+      val nulls: CursorValueCodec[String, String] = new CursorValueCodec[String, String] {
+        def encode(value: String): String         = value
+        def decode(value: String): Option[String] = Some(null)
+      }
+      val byName = MyH2Profile.api.seekerSortKeyIdentity[String, String](implicitly, implicitly, nulls)
+      val withNulls =
+        CompiledSeekPage[Unit]((_: Unit) => items.toSeeker.seek(_.name.asc)(byName).seek(_.id.asc))(_.id)
+      (the[IllegalArgumentException] thrownBy withNulls.pageWithoutCount((), 4, first.nextCursor)).getMessage should
+        include("of type java.lang.String decoded null")
+      // Ad-hoc pages too, instead of a page without rows
+      val adHocNulls = items.toSeeker.seek(_.name.asc)(byName).seek(_.id.asc)
+      (the[IllegalArgumentException] thrownBy adHocNulls.pageWithoutCountAs(4, first.nextCursor)(_.id)(
+        idShape,
+        MyH2Profile,
+        stringEnv,
+        ec
+      )).getMessage should include("of type java.lang.String decoded null")
     }
 
     "use row comparisons in compiled pages" in {

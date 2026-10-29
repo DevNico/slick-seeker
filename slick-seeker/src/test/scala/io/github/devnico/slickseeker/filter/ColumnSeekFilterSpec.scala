@@ -40,7 +40,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val ordered  = ColumnOrdered(column, Ordering(Ordering.Asc))
       val prevCond = LiteralColumn(Option(true))
 
-      val result = filter(ordered, 10, prevCond)
+      val result = filter(ordered, LiteralColumn(10), valueIsNull = false, prevCond)
 
       result should not be null
       result.toString should include("or")
@@ -51,7 +51,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val ordered  = ColumnOrdered(column, Ordering(Ordering.Desc))
       val prevCond = LiteralColumn(Option(true))
 
-      val result = filter(ordered, 10, prevCond)
+      val result = filter(ordered, LiteralColumn(10), valueIsNull = false, prevCond)
 
       result should not be null
       result.toString should include("or")
@@ -66,7 +66,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val ordered  = ColumnOrdered(column, Ordering(Ordering.Asc, Ordering.NullsFirst))
       val prevCond = LiteralColumn(Option(true))
 
-      val result = filter(ordered, Some(10), prevCond)
+      val result = filter(ordered, LiteralColumn(Option(10)), valueIsNull = false, prevCond)
 
       result should not be null
       result.toString should include("or")
@@ -77,7 +77,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val ordered  = ColumnOrdered(column, Ordering(Ordering.Asc, Ordering.NullsFirst))
       val prevCond = LiteralColumn(Option(true))
 
-      val result = filter(ordered, None, prevCond)
+      val result = filter(ordered, LiteralColumn(Option.empty[Int]), valueIsNull = true, prevCond)
 
       result should not be null
       result.toString should include("or")
@@ -88,7 +88,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val ordered  = ColumnOrdered(column, Ordering(Ordering.Asc, Ordering.NullsLast))
       val prevCond = LiteralColumn(Option(true))
 
-      val result = filter(ordered, Some(10), prevCond)
+      val result = filter(ordered, LiteralColumn(Option(10)), valueIsNull = false, prevCond)
 
       result should not be null
       result.toString should include("or")
@@ -99,7 +99,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val ordered  = ColumnOrdered(column, Ordering(Ordering.Asc, Ordering.NullsLast))
       val prevCond = LiteralColumn(Option(true))
 
-      val result = filter(ordered, None, prevCond)
+      val result = filter(ordered, LiteralColumn(Option.empty[Int]), valueIsNull = true, prevCond)
 
       result should not be null
       result.toString should include("and")
@@ -110,7 +110,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val ordered  = ColumnOrdered(column, Ordering(Ordering.Desc, Ordering.NullsFirst))
       val prevCond = LiteralColumn(Option(true))
 
-      val result = filter(ordered, Some(10), prevCond)
+      val result = filter(ordered, LiteralColumn(Option(10)), valueIsNull = false, prevCond)
 
       result should not be null
       result.toString should include("or")
@@ -121,7 +121,7 @@ class ColumnSeekFilterSpec extends AnyWordSpec with Matchers {
       val ordered  = ColumnOrdered(column, Ordering(Ordering.Asc, Ordering.NullsDefault))
       val prevCond = LiteralColumn(Option(true))
 
-      val result = filter(ordered, Some(10), prevCond)
+      val result = filter(ordered, LiteralColumn(Option(10)), valueIsNull = false, prevCond)
 
       result should not be null
       result.toString should include("or")

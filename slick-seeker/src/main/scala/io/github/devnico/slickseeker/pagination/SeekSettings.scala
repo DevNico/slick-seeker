@@ -47,10 +47,15 @@ final private[slickseeker] case class SeekSettings(
 
   /** The cursor value of an ad-hoc page as a parameter of `tpe`, not a literal: a literal can compare unequal to the
     * column's value (e.g. `0.1` to a REAL 0.1f on PostgreSQL). Written as a literal, as before parameters, if the value
-    * has another type (from codecs that don't decode the column's type).
+    * has another type (from codecs that don't decode the column's type). A `null` value (from a codec decoding
+    * `Some(null)`) throws `IllegalArgumentException`: as a literal or parameter, it would match no row.
     */
   def bind[T](value: T, tpe: TypedType[T]): Rep[T] =
-    if (!SeekSettings.hasType(value, tpe)) LiteralColumn(value)(tpe)
+    if (value == null)
+      throw new IllegalArgumentException(
+        s"The cursor value codec of a column of type ${SeekSettings.describe(tpe)} decoded null"
+      )
+    else if (!SeekSettings.hasType(value, tpe)) LiteralColumn(value)(tpe)
     else Rep.forNode[T](LiteralNode(paramType(tpe.asInstanceOf[TypedType[Any]]), value, vol = true))(tpe)
 
   /** `value` (a cursor value of `tpe` for `column` of the query `base`) cast to the type [[cursorValueCast]] gives for

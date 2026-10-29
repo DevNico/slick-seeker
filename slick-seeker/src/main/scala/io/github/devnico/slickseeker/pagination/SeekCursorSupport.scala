@@ -38,7 +38,7 @@ final private[slickseeker] case class SeekCursorSupport[E, U, CVE, C, CU](
   }
 
   /** The cursor values as parameters of `paramType(column type)`, nested like the cursor columns `(last, (…, (first,
-    * seed)))`. Needs the sort keys' `typedType`.
+    * seed)))`.
     */
   def paramShape(paramType: TypedType[Any] => TypedType[Any]): AnyShape =
     columns.foldLeft(Shape.primitiveShape[Int, ColumnsShapeLevel](ScalaBaseType.intType).asInstanceOf[AnyShape]) {
@@ -59,16 +59,30 @@ final private[slickseeker] case class SeekCursorSupport[E, U, CVE, C, CU](
         } yield (v, t)
       }
 
-  /** Whether the [[decodeParams]] values all have their column's type, so they can be bound as parameters (cursor value
-    * codecs are not checked to decode their type). Needs the sort keys' `typedType`.
-    */
-  def bindable(params: Any): Boolean =
+  /** The first [[decodeParams]] value (last column first) that doesn't have its column's type, described. */
+  def mistyped(params: Any): Option[String] =
     columns.reverseIterator
-      .foldLeft[(Boolean, Any)]((true, params)) {
-        case ((ok, (value, tail)), column) => (ok && SeekSettings.hasType(value, column.typedType()), tail)
-        case (acc, _)                      => acc
+      .foldLeft[(Option[String], Any)]((None, params)) {
+        case ((found, (value, tail)), column) =>
+          val tpe = column.typedType()
+          (
+            found.orElse(
+              Option.when(!SeekSettings.hasType(value, tpe))(
+                s"the cursor value codec of a column of type ${SeekSettings.describe(tpe)} decoded ${describeValue(value)}"
+              )
+            ),
+            tail
+          )
+        case (acc, _) => acc
       }
       ._1
+
+  private def describeValue(value: Any): String = value match {
+    case null    => "null"
+    case Some(v) => s"Some(${describeValue(v)})"
+    case None    => "None"
+    case other   => other.getClass.getName
+  }
 
   /** Which cursor values of [[decodeParams]] are `None`, first column first. */
   @scala.annotation.tailrec

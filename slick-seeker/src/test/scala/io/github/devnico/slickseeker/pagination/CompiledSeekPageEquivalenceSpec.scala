@@ -204,23 +204,27 @@ class CompiledSeekPageEquivalenceSpec extends AnyWordSpec with Matchers with Bef
       pages.distinct shouldBe Seq(await(db.run(adHoc(config, 0).pageWithoutCountAs(2, first.nextCursor)(_.id))))
     }
 
-    "page custom sort keys and filters that can't bind cursor values like the ad-hoc seeker" in {
+    "page custom sort keys and filters as compiled queries, like the ad-hoc seeker" in {
       val base = MyH2Profile.api.seekerSortKeyIdentity[Int, String]
-      // Neither typedType nor applyParam, as custom ones written before 0.7.0
       val customFilter: ColumnSeekFilter[Int] = new ColumnSeekFilter[Int] {
-        def apply(column: slick.lifted.ColumnOrdered[Int], value: Int, prevCond: ColumnSeekFilterTypes.FilterCond) =
-          base.filter(column, value, prevCond)
+        def apply(
+            column: slick.lifted.ColumnOrdered[Int],
+            value: Rep[Int],
+            valueIsNull: Boolean,
+            prevCond: ColumnSeekFilterTypes.FilterCond
+        ) = base.filter(column, value, valueIsNull, prevCond)
       }
       val custom: SeekerSortKey[Int, Int, String] = new SeekerSortKey[Int, Int, String] {
         def mapCol(col: slick.lifted.ColumnOrdered[Int]) = base.mapCol(col)
         def shape                                        = base.shape
         def filter: ColumnSeekFilter[Int]                = customFilter
         def codec: CursorValueCodec[Int, String]         = base.codec
+        def typedType                                    = base.typedType
       }
       val seeker =
         (minId: Rep[Int]) => rows.filter(_.id >= minId).toSeeker.seek(_.tag.asc.nullsLast).seek(_.id.asc)(custom)
       val page = CompiledSeekPage[Int]((minId: ConstColumn[Int]) => seeker(minId))(_.id)
-      page.maxForms shouldBe 1
+      page.maxForms shouldBe 5
 
       @tailrec def walk(
           cursor: Option[String],
@@ -243,6 +247,29 @@ class CompiledSeekPageEquivalenceSpec extends AnyWordSpec with Matchers with Bef
           await(db.run(page.pageWithoutCount(2, 3, Some(env.encode(values, direction))))) shouldBe pages.head
         }
       }
+    }
+
+    "fail on creation for a filter that can't build its condition" in {
+      val base = MyH2Profile.api.seekerSortKeyIdentity[Int, String]
+      val broken: SeekerSortKey[Int, Int, String] = new SeekerSortKey[Int, Int, String] {
+        def mapCol(col: slick.lifted.ColumnOrdered[Int]) = base.mapCol(col)
+        def shape                                        = base.shape
+        def codec: CursorValueCodec[Int, String]         = base.codec
+        def typedType                                    = base.typedType
+        def filter: ColumnSeekFilter[Int] = new ColumnSeekFilter[Int] {
+          def apply(
+              column: slick.lifted.ColumnOrdered[Int],
+              value: Rep[Int],
+              valueIsNull: Boolean,
+              prevCond: ColumnSeekFilterTypes.FilterCond
+          ) = if (column.ord.direction == slick.ast.Ordering.Desc) throw new IllegalStateException("no desc")
+          else prevCond
+        }
+      }
+      // Only backward pages of this ascending seeker reach the failing branch
+      the[IllegalStateException] thrownBy
+        CompiledSeekPage[Unit]((_: Unit) => rows.toSeeker.seek(_.tag.asc.nullsLast).seek(_.id.asc)(broken))(_.id) should
+        have message "no desc"
     }
 
     "reject a seeker without seek columns" in {
