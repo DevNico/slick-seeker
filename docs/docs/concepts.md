@@ -280,11 +280,14 @@ users.toSeeker.seek(_.name.asc)(byLength).seek(_.id.asc)
 ```
 
 `column.ord` is the page's order (reversed on backward pages). On `Option` columns its nulls ordering is always
-explicit (the database's default if the seek column has none), so a filter can rely on it.
+explicit (the database's default if the seek column has none), so a filter can rely on it. Whether a sort key is an
+`Option` comes from its `typedType`, so that must match the type of the column `mapCol` gives.
 
 Before 0.8.0, `typedType` and a second method taking a bound value (`applyParam`) were optional, and `apply` took the
 cursor value itself. Implement `typedType`, and move the condition into the `apply` taking a `Rep`: a custom key or
-filter without them no longer compiles.
+filter without them no longer compiles. Code calling a built-in filter directly passes the value as a `Rep` too:
+`filter(column, LiteralColumn(value), valueIsNull = false, prevCond)`. A codec decoding `Some(null)` now fails the page
+(`IllegalArgumentException`) instead of returning no rows.
 
 ## Supported Databases
 
@@ -380,7 +383,7 @@ byMinAge.pageWithoutCount(params = 30, limit = 20, cursor = None)   // or .page(
   without a cursor filter, or with one on the leading columns if there are fewer values than columns).
 - Every page is a compiled query, for every seeker: sort keys and filters, built-in or
   [custom](#custom-filters-and-sort-keys), always bind cursor values. A cursor value a codec decoded as another type
-  than its column's (only possible through an unchecked cast) can't be bound: the page throws
+  than its column's (through an unchecked cast, or `null`) can't be bound: the page throws
   `IllegalArgumentException` (`page` before its count runs).
 - Generic plans: see [Cursor Values as Parameters](#cursor-values-as-parameters).
 - The seeker needs at least one seek column.

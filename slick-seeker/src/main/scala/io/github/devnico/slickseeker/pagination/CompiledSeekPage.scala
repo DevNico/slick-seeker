@@ -1,7 +1,7 @@
 package io.github.devnico.slickseeker.pagination
 
 import io.github.devnico.slickseeker.cursor.{CursorDirection, CursorEnvironment}
-import slick.ast.{ScalaBaseType, TypedType}
+import slick.ast.{OptionType, ScalaBaseType, TypedType}
 import slick.dbio
 import slick.jdbc.JdbcProfile
 import slick.lifted.{
@@ -35,8 +35,8 @@ import scala.concurrent.ExecutionContext
   * don't decode or don't match the cursor columns give the first page (the ad-hoc seeker then pages without a cursor
   * filter, or filters on the leading columns if there are fewer values than columns).
   *
-  * Every page is a compiled query. A page whose cursor value a codec decoded as another type than its column's (only
-  * possible through unchecked casts) throws `IllegalArgumentException`, as that value can't be bound.
+  * Every page is a compiled query. A page whose cursor value a codec decoded as another type than its column's (through an
+  * unchecked cast, or `null`) throws `IllegalArgumentException`, as that value can't be bound.
   *
   * The seeker needs at least one seek column.
   */
@@ -67,6 +67,16 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
   private val cursorSupport: SeekCursorSupport[E, U, CVE, Any, Any] = {
     val structure = build(appShape.buildParams(placeholder("parameter")))
     require(structure.columns.nonEmpty, "CompiledSeekPage needs a seeker with at least one seek column")
+    // Builds every form once (forward and backward, without and with None values in the nullable cursor columns), so a
+    // sort key or filter that fails to build its condition fails here rather than on a later page
+    val cursor   = structure.cursorSupport.paramShape(settings.paramType).buildParams(placeholder("cursor value"))
+    val nullable = structure.columns.map(_.typedType().isInstanceOf[OptionType]).toList
+    for {
+      isBackward <- Seq(false, true)
+      nullFlags  <- Seq(nullable.map(_ => false), nullable).distinct
+    } structure.paramPageQuery[P, PU](Some(cursor), nullFlags, isBackward, limitShape.buildParams(placeholder("limit")), settings)(
+      select
+    )
     structure.cursorSupport
   }
 

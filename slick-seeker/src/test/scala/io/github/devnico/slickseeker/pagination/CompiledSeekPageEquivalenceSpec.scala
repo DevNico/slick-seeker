@@ -249,6 +249,28 @@ class CompiledSeekPageEquivalenceSpec extends AnyWordSpec with Matchers with Bef
       }
     }
 
+    "fail on creation for a filter that can't build its condition" in {
+      val base = MyH2Profile.api.seekerSortKeyIdentity[Int, String]
+      val broken: SeekerSortKey[Int, Int, String] = new SeekerSortKey[Int, Int, String] {
+        def mapCol(col: slick.lifted.ColumnOrdered[Int]) = base.mapCol(col)
+        def shape                                        = base.shape
+        def codec: CursorValueCodec[Int, String]         = base.codec
+        def typedType                                    = base.typedType
+        def filter: ColumnSeekFilter[Int] = new ColumnSeekFilter[Int] {
+          def apply(
+              column: slick.lifted.ColumnOrdered[Int],
+              value: Rep[Int],
+              valueIsNull: Boolean,
+              prevCond: ColumnSeekFilterTypes.FilterCond
+          ) = if (column.ord.direction == slick.ast.Ordering.Desc) throw new IllegalStateException("no desc") else prevCond
+        }
+      }
+      // Only backward pages of this ascending seeker reach the failing branch
+      the[IllegalStateException] thrownBy
+        CompiledSeekPage[Unit]((_: Unit) => rows.toSeeker.seek(_.tag.asc.nullsLast).seek(_.id.asc)(broken))(_.id) should
+        have message "no desc"
+    }
+
     "reject a seeker without seek columns" in {
       an[IllegalArgumentException] should be thrownBy
         CompiledSeekPage[Unit]((_: Unit) => rows.toSeeker)(_.id)

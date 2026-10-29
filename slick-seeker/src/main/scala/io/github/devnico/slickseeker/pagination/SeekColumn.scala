@@ -52,7 +52,7 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         val newCol      = originalCol.reverse
 
         (originalCol.ord.direction, originalCol.ord.nulls) match {
-          case (_, Ordering.NullsDefault) if !self.nullable(originalCol) => newCol
+          case (_, Ordering.NullsDefault) if !self.nullable => newCol
           case (Ordering.Asc, Ordering.NullsFirst)                       => newCol.nullsLast
           case (Ordering.Asc, Ordering.NullsLast)                        => newCol.nullsFirst
           case (Ordering.Asc, Ordering.NullsDefault)                     => newCol.nullsFirst
@@ -114,7 +114,7 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         type Column = self.Column
         val col: E => ColumnOrdered[Column] = { table =>
           val ordered = self.col(table)
-          if (ordered.ord.nulls != Ordering.NullsDefault || !(builtInOption || self.isOption(ordered))) ordered
+          if (ordered.ord.nulls != Ordering.NullsDefault || !(builtInOption || self.isOption)) ordered
           else ordered.copy(ord = ordered.ord.copy(nulls = settings.defaultNulls(ordered.ord.direction)))
         }
         val filter    = self.filter
@@ -124,10 +124,10 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
   }
 
   /** Whether this column can be null: an `Option` column, unless its filter is the built-in non-null one. */
-  def nullable(ordered: ColumnOrdered[?]): Boolean = !nonNull && isOption(ordered)
+  def nullable: Boolean = !nonNull && isOption
 
   /** Whether `ordered` sorts an `Option` column or expression (after its sort key's type). */
-  def isOption(ordered: ColumnOrdered[?]): Boolean =
+  def isOption: Boolean =
     typedType().isInstanceOf[OptionType]
 
   /** Whether this column can be part of a row value comparison (see [[RowComparableSeekFilter]]). */

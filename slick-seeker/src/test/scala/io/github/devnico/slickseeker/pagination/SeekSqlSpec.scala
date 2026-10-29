@@ -149,6 +149,14 @@ class SeekSqlSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
         CompiledSeekPage[Unit]((_: Unit) => items.toSeeker.seek(_.name.asc)(byName).seek(_.id.asc))(_.id)
       (the[IllegalArgumentException] thrownBy withNulls.pageWithoutCount((), 4, first.nextCursor)).getMessage should
         include("of type java.lang.String decoded null")
+      // Ad-hoc pages too, instead of a page without rows
+      val adHocNulls = items.toSeeker.seek(_.name.asc)(byName).seek(_.id.asc)
+      (the[IllegalArgumentException] thrownBy adHocNulls.pageWithoutCountAs(4, first.nextCursor)(_.id)(
+        idShape,
+        MyH2Profile,
+        stringEnv,
+        ec
+      )).getMessage should include("of type java.lang.String decoded null")
     }
 
     "use row comparisons in compiled pages" in {

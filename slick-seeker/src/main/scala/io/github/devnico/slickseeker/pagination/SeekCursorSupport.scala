@@ -38,7 +38,7 @@ final private[slickseeker] case class SeekCursorSupport[E, U, CVE, C, CU](
   }
 
   /** The cursor values as parameters of `paramType(column type)`, nested like the cursor columns `(last, (…, (first,
-    * seed)))`. Needs the sort keys' `typedType`.
+    * seed)))`.
     */
   def paramShape(paramType: TypedType[Any] => TypedType[Any]): AnyShape =
     columns.foldLeft(Shape.primitiveShape[Int, ColumnsShapeLevel](ScalaBaseType.intType).asInstanceOf[AnyShape]) {
@@ -59,9 +59,6 @@ final private[slickseeker] case class SeekCursorSupport[E, U, CVE, C, CU](
         } yield (v, t)
       }
 
-  /** Whether the [[decodeParams]] values all have their column's type, so they can be bound as parameters (cursor value
-    * codecs are not checked to decode their type). Needs the sort keys' `typedType`.
-    */
   /** The first [[decodeParams]] value (last column first) that doesn't have its column's type, described. */
   def mistyped(params: Any): Option[String] =
     columns.reverseIterator
