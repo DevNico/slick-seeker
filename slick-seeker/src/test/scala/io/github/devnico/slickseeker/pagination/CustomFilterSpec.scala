@@ -107,6 +107,39 @@ class CustomFilterSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll 
       }
     }
 
+    "page them in compiled pages with bound cursor values if they support it" in {
+      val binding: SeekerSortKey[Option[String], Option[String], String] =
+        new SeekerSortKey[Option[String], Option[String], String] {
+          def mapCol(col: slick.lifted.ColumnOrdered[Option[String]]) = builtIn.mapCol(col)
+          def shape                                                   = builtIn.shape
+          def codec: CursorValueCodec[Option[String], String]         = builtIn.codec
+          override def typedType                                      = builtIn.typedType
+          def filter: ColumnSeekFilter[Option[String]] = new ColumnSeekFilter[Option[String]] {
+            def apply(
+                column: slick.lifted.ColumnOrdered[Option[String]],
+                value: Option[String],
+                prevCond: ColumnSeekFilterTypes.FilterCond
+            ) = builtIn.filter(column, value, prevCond)
+            override def applyParam(
+                column: slick.lifted.ColumnOrdered[Option[String]],
+                value: Rep[Option[String]],
+                valueIsNull: Boolean,
+                prevCond: ColumnSeekFilterTypes.FilterCond
+            ) = builtIn.filter.applyParam(column, value, valueIsNull, prevCond)
+          }
+        }
+      Seq(
+        items.toSeeker.seek(_.tag.asc)(binding).seek(_.id.asc),
+        items.toSeeker.seek(_.tag.desc)(binding).seek(_.id.asc)
+      )
+        .foreach { seeker =>
+          val compiled = CompiledSeekPage[Unit]((_: Unit) => seeker)(_.id)
+          compiled.maxForms shouldBe 5
+          walk(c => await(db.run(compiled.pageWithoutCount((), 3, c)))) shouldBe
+            walk(c => await(db.run(seeker.pageWithoutCountAs(3, c)(_.id))))
+        }
+    }
+
     "page a column of a mapped query in the database's order, forward and backward" in {
       val seeker   = items.map(r => (r.id, r.tag)).toSeeker.seek(_._2.asc)(custom).seek(_._1.asc)
       val expected = await(db.run(items.sortBy(r => (r.tag.asc, r.id.asc)).map(_.id).result)).toVector

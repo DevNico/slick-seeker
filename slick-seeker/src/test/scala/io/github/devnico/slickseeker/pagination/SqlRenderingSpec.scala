@@ -1,5 +1,6 @@
 package io.github.devnico.slickseeker.pagination
 
+import io.github.devnico.slickseeker.support.SlickEquals
 import io.github.devnico.slickseeker.SlickSeekerSupport
 import io.github.devnico.slickseeker.cursor._
 import io.github.devnico.slickseeker.support.{MyH2Profile, SortDirection}
@@ -12,7 +13,7 @@ import slick.jdbc.{HsqldbProfile, JdbcProfile, MySQLProfile, PostgresProfile, SQ
 import java.time.LocalDateTime
 
 // The SQL of cursor pages as other profiles render it (no database needed).
-class SqlRenderingSpec extends AnyWordSpec with Matchers {
+class SqlRenderingSpec extends AnyWordSpec with Matchers with SlickEquals {
 
   implicit val intCodec: CursorValueCodec[Int, String] = new CursorValueCodec[Int, String] {
     def encode(value: Int): String         = value.toString
@@ -171,6 +172,23 @@ class SqlRenderingSpec extends AnyWordSpec with Matchers {
       val ascFirst = items.toSeeker.seek(_.tag.asc.nullsFirst).seek(_.id.asc)
       order(ascFirst.seekDirection(SortDirection.Asc)) should include(""""tag" nulls first""")
       order(ascFirst.seekDirection(SortDirection.Desc)) should include(""""tag" desc nulls last""")
+    }
+
+    "give Option columns without a nulls clause the database's default after seekDirection" in {
+      def order(
+          profile: JdbcProfile,
+          seeker: SlickSeeker[Items, (Int, String, Option[String], String, LocalDateTime), String, ?, ?]
+      ) = {
+        val s = sql(seeker, profile, Seq("St1", "5"))
+        s.substring(s.toLowerCase.indexOf("order by")).toLowerCase
+      }
+      val desc = items.toSeeker.seek(_.tag).seek(_.id).seekDirection(SortDirection.Desc)
+      order(MyH2Profile, desc) should include(""""tag" desc nulls last""")
+      order(PostgresProfile, desc) should include(""""tag" desc nulls first""")
+      all(Seq(MySQLProfile, SQLiteProfile, SQLServerProfile).map(order(_, desc))) should not include "null"
+      val asc = items.toSeeker.seek(_.tag.desc).seek(_.id).seekDirection(SortDirection.Asc)
+      order(MyH2Profile, asc) should include(""""tag" nulls first""")
+      order(PostgresProfile, asc) should include(""""tag" nulls last""")
     }
 
     "write the database's default nulls placement out for Option columns" in {

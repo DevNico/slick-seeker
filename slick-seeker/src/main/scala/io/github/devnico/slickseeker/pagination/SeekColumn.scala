@@ -30,17 +30,12 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
         val current = self.col(t)
         val newDir =
           if (direction == io.github.devnico.slickseeker.support.SortDirection.Asc) Ordering.Asc else Ordering.Desc
+        // Reversing the direction mirrors explicit nulls, keeping it keeps them; without a nulls clause, pages resolve
+        // the database's default for the new direction (see withDefaultNulls)
         val finalNulls =
-          if (current.ord.nulls == Ordering.NullsDefault && !self.nullable(current)) Ordering.NullsDefault
-          else if (current.ord.nulls != Ordering.NullsDefault) {
-            // Reversing the direction mirrors the nulls; keeping it keeps them
-            if (current.ord.direction == newDir) current.ord.nulls
-            else if (current.ord.nulls == Ordering.NullsFirst) Ordering.NullsLast
-            else Ordering.NullsFirst
-          } else {
-            if (direction == io.github.devnico.slickseeker.support.SortDirection.Asc) Ordering.NullsLast
-            else Ordering.NullsFirst
-          }
+          if (current.ord.nulls == Ordering.NullsDefault || current.ord.direction == newDir) current.ord.nulls
+          else if (current.ord.nulls == Ordering.NullsFirst) Ordering.NullsLast
+          else Ordering.NullsFirst
         current.copy(ord = Ordering(newDir, finalNulls))
       }
       val filter    = self.filter

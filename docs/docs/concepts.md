@@ -155,15 +155,11 @@ trait MyCockroachProfile extends PostgresProfile with SlickSeekerSupport {
 ```
 
 `seekDirection` keeps explicit null orderings when a column already sorts in that direction and mirrors them when it
-reverses it (`.desc.nullsFirst` becomes `.asc.nullsLast`). `Option` columns without one get its own null ordering, as
-in earlier versions (not the database's default):
+reverses it (`.desc.nullsFirst` becomes `.asc.nullsLast`). Columns without one keep the database's default for the new
+direction, as if they had been declared with it:
 
 ```scala
-// ASC: nulls last
-.seek(_.lastName)
-.seekDirection(SortDirection.Asc)
-
-// DESC: nulls first
+// Same as .seek(_.lastName.desc): nulls where the database puts them for DESC
 .seek(_.lastName)
 .seekDirection(SortDirection.Desc)
 ```
@@ -338,6 +334,7 @@ byMinAge.pageWithoutCount(params = 30, limit = 20, cursor = None)   // or .page(
   and for cursor values a codec decoded as another type than the column's.
 - Generic plans: see [Cursor Values as Parameters](#cursor-values-as-parameters).
 - The seeker needs at least one seek column.
+- `SlickPgTupleSeeker` (deprecated) is not supported; `toSeeker` seekers use the same row value comparisons.
 
 ## Bidirectional Pagination
 
