@@ -1,5 +1,3 @@
-import com.typesafe.tools.mima.core._
-
 // Publishing settings
 ThisBuild / organization         := "io.github.devnico"
 ThisBuild / organizationName     := "slick-seeker"
@@ -34,7 +32,7 @@ ThisBuild / makePomConfiguration := makePomConfiguration.value.withConfiguration
 // Version and Scala settings
 val slickSeekerVersion = "0.8.0"
 // The release binary compatibility is checked against (mimaReportBinaryIssues); bump it after each release
-val mimaBaseVersion = "0.7.2"
+val mimaBaseVersion = "0.8.0"
 
 val scala3Version   = "3.3.5"
 val scala213Version = "2.13.16"
@@ -79,11 +77,6 @@ lazy val core = (project in file("slick-seeker"))
   .settings(
     commonSettings,
     name := "slick-seeker",
-    // 0.8.0: custom sort keys and filters must bind cursor values (compile-time safe compiled pages)
-    mimaBinaryIssueFilters ++= Seq(
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "io.github.devnico.slickseeker.filter.ColumnSeekFilter.$init$"
-      ),
       ProblemFilters.exclude[DirectMissingMethodProblem]("io.github.devnico.slickseeker.filter.ColumnSeekFilter.apply"),
       ProblemFilters.exclude[ReversedMissingMethodProblem](
         "io.github.devnico.slickseeker.filter.ColumnSeekFilter.apply"
