@@ -95,7 +95,8 @@ lazy val core = (project in file("slick-seeker"))
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "io.github.devnico.slickseeker.filter.SeekerSortKey.typedType"
       ),
-      ProblemFilters.exclude[MissingClassProblem]("io.github.devnico.slickseeker.filter.NoCompiledPages")
+      ProblemFilters.exclude[MissingClassProblem]("io.github.devnico.slickseeker.filter.NoCompiledPages"),
+      ProblemFilters.exclude[MissingClassProblem]("io.github.devnico.slickseeker.filter.BuiltInSeekFilter")
     ),
     libraryDependencies ++= Seq(
       "com.typesafe.slick" %% "slick"       % slickVersion,

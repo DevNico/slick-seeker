@@ -53,12 +53,12 @@ private[slickseeker] trait SeekColumn[E, U, CVE] {
 
         (originalCol.ord.direction, originalCol.ord.nulls) match {
           case (_, Ordering.NullsDefault) if !self.nullable => newCol
-          case (Ordering.Asc, Ordering.NullsFirst)                       => newCol.nullsLast
-          case (Ordering.Asc, Ordering.NullsLast)                        => newCol.nullsFirst
-          case (Ordering.Asc, Ordering.NullsDefault)                     => newCol.nullsFirst
-          case (Ordering.Desc, Ordering.NullsFirst)                      => newCol.nullsLast
-          case (Ordering.Desc, Ordering.NullsLast)                       => newCol.nullsFirst
-          case (Ordering.Desc, Ordering.NullsDefault)                    => newCol.nullsLast
+          case (Ordering.Asc, Ordering.NullsFirst)          => newCol.nullsLast
+          case (Ordering.Asc, Ordering.NullsLast)           => newCol.nullsFirst
+          case (Ordering.Asc, Ordering.NullsDefault)        => newCol.nullsFirst
+          case (Ordering.Desc, Ordering.NullsFirst)         => newCol.nullsLast
+          case (Ordering.Desc, Ordering.NullsLast)          => newCol.nullsFirst
+          case (Ordering.Desc, Ordering.NullsDefault)       => newCol.nullsLast
         }
       }
       val filter    = self.filter

@@ -35,8 +35,8 @@ import scala.concurrent.ExecutionContext
   * don't decode or don't match the cursor columns give the first page (the ad-hoc seeker then pages without a cursor
   * filter, or filters on the leading columns if there are fewer values than columns).
   *
-  * Every page is a compiled query. A page whose cursor value a codec decoded as another type than its column's (through an
-  * unchecked cast, or `null`) throws `IllegalArgumentException`, as that value can't be bound.
+  * Every page is a compiled query. A page whose cursor value a codec decoded as another type than its column's (through
+  * an unchecked cast, or `null`) throws `IllegalArgumentException`, as that value can't be bound.
   *
   * The seeker needs at least one seek column.
   */
@@ -74,7 +74,13 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     for {
       isBackward <- Seq(false, true)
       nullFlags  <- Seq(nullable.map(_ => false), nullable).distinct
-    } structure.paramPageQuery[P, PU](Some(cursor), nullFlags, isBackward, limitShape.buildParams(placeholder("limit")), settings)(
+    } structure.paramPageQuery[P, PU](
+      Some(cursor),
+      nullFlags,
+      isBackward,
+      limitShape.buildParams(placeholder("limit")),
+      settings
+    )(
       select
     )
     structure.cursorSupport

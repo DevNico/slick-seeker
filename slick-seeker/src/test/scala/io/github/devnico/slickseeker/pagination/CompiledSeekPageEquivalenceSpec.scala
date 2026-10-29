@@ -262,7 +262,8 @@ class CompiledSeekPageEquivalenceSpec extends AnyWordSpec with Matchers with Bef
               value: Rep[Int],
               valueIsNull: Boolean,
               prevCond: ColumnSeekFilterTypes.FilterCond
-          ) = if (column.ord.direction == slick.ast.Ordering.Desc) throw new IllegalStateException("no desc") else prevCond
+          ) = if (column.ord.direction == slick.ast.Ordering.Desc) throw new IllegalStateException("no desc")
+          else prevCond
         }
       }
       // Only backward pages of this ascending seeker reach the failing branch
