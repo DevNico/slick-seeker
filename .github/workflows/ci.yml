@@ -55,14 +55,15 @@ jobs:
         run: sbt ++${{ matrix.scala }} mimaReportBinaryIssues
 
   databases:
-    name: Database (${{ matrix.database }})
+    name: Database (${{ matrix.database }} - Scala ${{ matrix.scala }})
     runs-on: ubuntu-latest
 
     # The default test job runs H2, HSQLDB and SQLite; these need Docker (Testcontainers) or Java 21 (Derby).
-    # A selected database that can't start fails the job.
+    # A selected database that can't start fails the job. One database per job, with each Scala version.
     strategy:
       matrix:
         database: [derby, postgresql, mysql, mariadb, sqlserver, oracle, cockroachdb]
+        scala: ['2.13.16', '3.3.5']
       fail-fast: false
 
     env:
@@ -80,7 +81,7 @@ jobs:
 
       - name: Run database tests
         run: >-
-          sbt ++3.3.5 "core/testOnly io.github.devnico.slickseeker.databases.*
+          sbt ++${{ matrix.scala }} "core/testOnly io.github.devnico.slickseeker.databases.*
           io.github.devnico.slickseeker.pagination.PostgreSqlSpec"
 
   docs:

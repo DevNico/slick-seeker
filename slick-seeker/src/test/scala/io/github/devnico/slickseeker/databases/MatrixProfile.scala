@@ -35,6 +35,11 @@ object MatrixProfile {
     override def seekerCursorValueCast(sqlType: String): Option[String] = None
   }
 
+  /** MySQL without casting cursor values: FLOAT values compare as the driver sends them (a control). */
+  object MySqlWithoutCasts extends MySQLProfile with MatrixProfile {
+    override def seekerCursorValueCast(sqlType: String): Option[String] = None
+  }
+
   /** CockroachDB uses PostgresProfile, but sorts nulls first ascending: the override the docs recommend. */
   object CockroachDb extends PostgresProfile with MatrixProfile {
     override def seekerDefaultNulls(direction: Ordering.Direction): Ordering.NullOrdering =

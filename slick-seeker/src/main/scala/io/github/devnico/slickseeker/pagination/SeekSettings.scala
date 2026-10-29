@@ -12,19 +12,22 @@ import slick.ast.{
   Library,
   LiteralNode,
   Node,
+  OptionApply,
   OptionTypedType,
   Ordering,
   ProductNode,
   Pure,
+  Ref,
   Select,
   StructNode,
+  TableExpansion,
   TableNode,
   TypeMapping,
   TypedType,
   Union
 }
-import slick.jdbc.{JdbcProfile, SQLServerProfile}
-import slick.lifted.{LiteralColumn, Rep}
+import slick.jdbc.{JdbcProfile, MySQLProfile, SQLServerProfile}
+import slick.lifted.{LiteralColumn, Rep, SimpleExpression}
 import slick.sql.SqlProfile
 import slick.util.ConstArray
 
@@ -57,12 +60,35 @@ final private[slickseeker] case class SeekSettings(
     SeekSettings
       .declaredType(profile, column, base, tpe)
       .flatMap(cursorValueCast)
-      .fold(value)(sqlType => Rep.forNode[T](Library.Cast.typed(tpe, value.toNode, LiteralNode(sqlType)))(tpe))
+      .fold(value)(sqlType => SeekSettings.cast(profile, value, sqlType, tpe))
 
-  /** Whether cursor columns are selected as expressions rather than as columns: SQL Server resolves `order by "id"`
-    * against the selected columns, and fails if a seek column is selected twice (in the item and the cursor).
+  /** Whether cursor columns, and columns the items select more than once, are selected as expressions rather than as
+    * columns: SQL Server resolves `order by "id"` against the selected columns, and fails if a column is selected twice
+    * (in the item and the cursor, or twice in the item).
     */
   def cursorColumnsAsExpressions: Boolean = profile.isInstanceOf[SQLServerProfile]
+
+  /** Whether pages select cursor columns (or items) other than as given (see [[cursorColumn]]). */
+  def rewritesSelection: Boolean = cursorColumnsAsExpressions || profile.isInstanceOf[MySQLProfile]
+
+  /** The cursor column `column` (over the elements of the query `scope`) as pages select it: as an expression on SQL
+    * Server (see [[cursorColumnsAsExpressions]]); on MySQL, cast to `DOUBLE` if its values are cast to `FLOAT` (see
+    * [[SlickSeekerSupport.seekerCursorValueCast]]), since MySQL and MariaDB send `FLOAT` values as text with 6
+    * significant digits, which the cursor value would keep; as given elsewhere.
+    */
+  def cursorColumn(column: Rep[?], scope: Node): Rep[?] =
+    if (cursorColumnsAsExpressions) Rep.forNodeUntyped[Any](SeekSettings.asExpression(column.toNode))
+    else
+      column match {
+        case typed: Rep.TypedRep[?] if profile.isInstanceOf[MySQLProfile] =>
+          val rep = typed.asInstanceOf[Rep.TypedRep[Any]]
+          val single = SeekSettings
+            .declaredType(profile, rep.toNode, scope, rep.tpe)
+            .flatMap(cursorValueCast)
+            .exists(_.trim.equalsIgnoreCase("FLOAT"))
+          if (single) SeekSettings.cast(profile, rep, "DOUBLE", rep.tpe) else column
+        case _ => column
+      }
 
   /** Where the database puts nulls without a nulls clause. */
   def defaultNulls(direction: Ordering.Direction): Ordering.NullOrdering =
@@ -167,6 +193,64 @@ private[slickseeker] object SeekSettings {
     case s: StructNode  => s.elements.toSeq.lift(idx - 1).map(_._2)
     case t: TypeMapping => child(t.child, idx)
     case _              => None
+  }
+
+  /** `value` (what a query over the elements of `from` selects) with the columns it selects under a name it selects
+    * more than once (e.g. `(t.id, t.id)`, or `t.id` beside the whole row `t`) as expressions, so that no two selected
+    * columns have the same name. Whole rows are counted, but stay as they are.
+    */
+  def withoutRepeatedColumns(value: Node, from: Node): Node = {
+    val counts   = columnNames(value, from).groupBy(identity).map { case (name, all) => (name, all.size) }
+    val repeated = counts.filter(_._2 > 1).keySet
+    def distinct(n: Node): Node = n match {
+      case select: Select =>
+        if (column(select, from).exists(repeated)) asExpression(select) else select
+      case _: ProductNode | _: StructNode | _: TypeMapping | _: OptionApply => n.mapChildren(distinct)
+      case other                                                            => other
+    }
+    if (repeated.isEmpty) value else distinct(value)
+  }
+
+  // The name of the column `n` (a path into the elements of `scope`) selects, if it selects one column.
+  private def column(n: Node, scope: Node): Option[String] = n match {
+    case Select(_, f: FieldSymbol) => Some(f.name)
+    case path @ Select(_, _: ElementSymbol) =>
+      element(scope, elementPath(path)).flatMap { case (e, s) => column(e, s) }
+    case OptionApply(child) => column(child, scope)
+    case _                  => None
+  }
+
+  // The names of the columns `n` (part of what a query over the elements of `scope` selects) selects as columns.
+  private def columnNames(n: Node, scope: Node): List[String] = n match {
+    case _: Select | _: OptionApply if column(n, scope).isDefined => column(n, scope).toList
+    case path @ Select(_, _: ElementSymbol) =>
+      element(scope, elementPath(path)).fold(List.empty[String]) { case (e, s) => columnNames(e, s) }
+    case _: Ref => rowColumnNames(scope)
+    case _: ProductNode | _: StructNode | _: TypeMapping | _: OptionApply =>
+      n.children.toSeq.toList.flatMap(columnNames(_, scope))
+    case _ => Nil
+  }
+
+  // The names of the columns of a whole element of the query `scope`.
+  private def rowColumnNames(scope: Node): List[String] = scope match {
+    case TableExpansion(_, _, columns) => columnNames(columns, scope)
+    case filtered: FilteredQuery       => rowColumnNames(filtered.from)
+    case Bind(_, from, Pure(value, _)) => columnNames(value, from)
+    case join: Join                    => rowColumnNames(join.left) ++ rowColumnNames(join.right)
+    case _                             => Nil
+  }
+
+  /** `CAST(value AS sqlType)`. Written out on MySQL, where Slick writes casts as JDBC escapes (`{fn convert(…)}`),
+    * which its drivers turn into other expressions or leave out for most types (e.g. `FLOAT`).
+    */
+  def cast[T](profile: JdbcProfile, value: Rep[T], sqlType: String, tpe: TypedType[T]): Rep[T] = profile match {
+    case _: MySQLProfile =>
+      SimpleExpression.unary[T, T] { (v, qb) =>
+        qb.sqlBuilder += "cast("
+        qb.expr(v)
+        qb.sqlBuilder += s" as $sqlType)"
+      }(tpe)(value)
+    case _ => Rep.forNode[T](Library.Cast.typed(tpe, value.toNode, LiteralNode(sqlType)))(tpe)
   }
 
   /** `column` as an expression that is not a column reference, with the same value and type. */

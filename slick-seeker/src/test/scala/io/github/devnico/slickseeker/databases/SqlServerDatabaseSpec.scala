@@ -1,7 +1,6 @@
 package io.github.devnico.slickseeker.databases
 
 import io.github.devnico.slickseeker.pagination.SlickSeeker
-import org.scalatest.exceptions.TestFailedException
 
 import java.time.{LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneOffset}
 import java.util.UUID
@@ -183,7 +182,7 @@ class SqlServerDatabaseSpec
       // What the casts fix: the driver's nvarchar and datetime2 parameters compare unlike the columns sort
       Seq("varchar, id", "datetime, id").foreach { name =>
         s"skip or repeat rows without casts: $name" in {
-          a[TestFailedException] should be thrownBy checkCase(typeCase(withoutCasts, name))
+          checkSkipsOrRepeats(typeCase(withoutCasts, name))
         }
       }
     }

@@ -2,7 +2,6 @@ package io.github.devnico.slickseeker.databases
 
 import io.github.devnico.slickseeker.pagination.PaginatedResultWithoutCount
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.exceptions.TestFailedException
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import slick.dbio.DBIO
@@ -99,6 +98,40 @@ abstract class DatabaseSpec(
     }
   }
 
+  /** The first run of `seekCase` on `on` (with any limit, forward or backward) whose items are `wrong` given the
+    * expected ones, as its description and items. Errors (e.g. of the setup) fail instead of counting as wrong items.
+    */
+  def firstWrongRun(seekCase: SeekCase, on: => Database = db)(
+      wrong: (Seq[Int], Seq[Int]) => Boolean
+  ): Option[(String, Seq[Int])] = {
+    val target   = on
+    val expected = await(target.run(seekCase.expected))
+    expected.sorted shouldBe seekCase.ids.sorted
+    val walks = for {
+      limit          <- limits.iterator
+      (runName, run) <- seekCase.runs.iterator
+    } yield {
+      val (forward, backward) = await(target.run(walk(run, limit).withPinnedSession))
+      Seq(
+        s"$runName, limit $limit, forward"  -> forward.flatMap(_.items),
+        s"$runName, limit $limit, backward" -> backward.reverse.flatMap(_.items)
+      )
+    }
+    walks.flatten.find { case (_, items) => wrong(expected, items) }
+  }
+
+  /** Checks that `seekCase` skips or repeats rows on `on`: some run's pages miss rows of the case or return some more
+    * than once, and return no others.
+    */
+  def checkSkipsOrRepeats(seekCase: SeekCase, on: => Database = db): Unit =
+    firstWrongRun(seekCase, on)((expected, items) => items.sorted != expected.sorted) match {
+      case None => fail(s"${seekCase.name}: every run returned every row once")
+      case Some((runName, items)) =>
+        withClue(s"$runName: ") {
+          items.toSet.subsetOf(seekCase.ids.toSet) shouldBe true
+        }
+    }
+
   if (database.selected) {
     s"Seekers on ${database.name}" should {
       schemaList.foreach { schema =>
@@ -106,9 +139,7 @@ abstract class DatabaseSpec(
           database.limitations.get(seekCase.name) match {
             case None => s"page every row once in the database's order: ${seekCase.name}" in checkCase(seekCase)
             case Some(reason) =>
-              s"fail as documented ($reason): ${seekCase.name}" in {
-                a[TestFailedException] should be thrownBy checkCase(seekCase)
-              }
+              s"skip or repeat rows as documented ($reason): ${seekCase.name}" in checkSkipsOrRepeats(seekCase)
           }
         }
       }
@@ -121,8 +152,27 @@ class HsqldbDatabaseSpec     extends DatabaseSpec(TestDatabase.Hsqldb)
 class SQLiteDatabaseSpec     extends DatabaseSpec(TestDatabase.SQLite)
 class DerbyDatabaseSpec      extends DatabaseSpec(TestDatabase.Derby)
 class PostgreSqlDatabaseSpec extends DatabaseSpec(TestDatabase.PostgreSql)
-class MySqlDatabaseSpec      extends DatabaseSpec(TestDatabase.MySql)
-class MariaDbDatabaseSpec extends DatabaseSpec(TestDatabase.MariaDb) {
+
+/** Also single-precision `FLOAT` columns, and a control without casts. */
+abstract class MySqlFamilyDatabaseSpec(database: TestDatabase)
+    extends DatabaseSpec(database, d => Seq(new MatrixSchema(d), new MySqlFloatSchema(d, d.profile))) {
+  // Same tables as the suite's schema (not set up again)
+  lazy val withoutCasts = new MySqlFloatSchema(database, MatrixProfile.MySqlWithoutCasts)
+
+  if (database.selected) {
+    database.name should {
+      // What the FLOAT casts fix: the drivers send Float parameters as text, whose DOUBLE value never equals FLOAT's
+      Seq("FLOAT, id", "Option FLOAT nullsLast, id desc").foreach { name =>
+        s"skip or repeat rows without casts: $name" in {
+          checkSkipsOrRepeats(withoutCasts.cases.find(_.name == name).get)
+        }
+      }
+    }
+  }
+}
+
+class MySqlDatabaseSpec extends MySqlFamilyDatabaseSpec(TestDatabase.MySql)
+class MariaDbDatabaseSpec extends MySqlFamilyDatabaseSpec(TestDatabase.MariaDb) {
   if (TestDatabase.MariaDb.selected) {
     "MariaDB" should {
       "page REAL columns with server-side prepared statements (binary parameters)" in {
@@ -139,9 +189,8 @@ class CockroachDbDatabaseSpec extends DatabaseSpec(TestDatabase.CockroachDb) {
       "need the documented nulls override: PostgreSQL's defaults put null rows elsewhere than it sorts them" in {
         // The suite's tables, paged with PostgresProfile's defaults (nulls last ascending)
         val postgres = new MatrixSchema(TestDatabase.CockroachDb, MatrixProfile.PostgreSql)
-        a[TestFailedException] should be thrownBy checkCase(
-          postgres.cases.find(_.name == "tag (default nulls), id").get
-        )
+        val tagCase  = postgres.cases.find(_.name == "tag (default nulls), id").get
+        firstWrongRun(tagCase)((expected, items) => items != expected) shouldBe defined
       }
     }
   }

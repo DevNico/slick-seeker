@@ -31,8 +31,9 @@ abstract class SeekSchema(val database: TestDatabase, val profile: MatrixProfile
   def declared[T](column: String, default: slick.ast.ColumnOption[T]*): Seq[slick.ast.ColumnOption[T]] =
     database.sqlType(column).fold(default)(t => Seq(profile.columnOptions.SqlType(t)))
 
-  private val idShape: Shape[FlatShapeLevel, Rep[Int], Int, Rep[Int]] = implicitly
-  private val unitShape: Shape[ColumnsShapeLevel, Unit, Unit, Unit]   = implicitly
+  private val idShape: Shape[FlatShapeLevel, Rep[Int], Int, Rep[Int]]                                    = implicitly
+  private val unitShape: Shape[ColumnsShapeLevel, Unit, Unit, Unit]                                      = implicitly
+  private val idPairShape: Shape[FlatShapeLevel, (Rep[Int], Rep[Int]), (Int, Int), (Rep[Int], Rep[Int])] = implicitly
 
   /** A case paging `seeker` ad-hoc and compiled, as ids (`id`) and whole elements (`whole` gives their id). Expected:
     * the base query sorted by the seek columns as declared (nulls where the database puts them by default).
@@ -46,7 +47,15 @@ abstract class SeekSchema(val database: TestDatabase, val profile: MatrixProfile
       seeker.baseQuery.sortBy(e => new Ordered(seeker.columns.flatMap(_.col(e).columns))).map(id)
     val compiledIds   = CompiledSeekPage[Unit]((_: Unit) => seeker)(id, maxLimit = 1000)(unitShape, idShape, profile)
     val compiledWhole = CompiledSeekPage[Unit]((_: Unit) => seeker)(e => e, maxLimit = 1000)(unitShape, eShape, profile)
-    val count         = rows.size
+    // The id selected twice: the same column twice in the select list
+    val compiledIdPairs =
+      CompiledSeekPage[Unit]((_: Unit) => seeker)(e => (id(e), id(e)), maxLimit = 1000)(unitShape, idPairShape, profile)
+    val count = rows.size
+
+    def firstOfPairs(page: PaginatedResultWithoutCount[(Int, Int)]): PaginatedResultWithoutCount[Int] = {
+      page.items.foreach { case (a, b) => require(a == b, s"pair ($a, $b) of the same column") }
+      page.mapItems(_._1)
+    }
 
     def checkedCount[T](total: Int, page: PaginatedResultWithoutCount[T]): PaginatedResultWithoutCount[T] = {
       require(total == count, s"total $total instead of $count")
@@ -71,6 +80,16 @@ abstract class SeekSchema(val database: TestDatabase, val profile: MatrixProfile
             .pageAs(limit, cursor, 1000)(id)(idShape, profile, profile.api.cursorEnv, ec)
             .map(p => checkedCount(p.total, p.withoutCount))
         ),
+        "ad-hoc pageWithoutCountAs((id, id))" -> ((limit, cursor) =>
+          seeker
+            .pageWithoutCountAs(limit, cursor, 1000)(e => (id(e), id(e)))(
+              idPairShape,
+              profile,
+              profile.api.cursorEnv,
+              ec
+            )
+            .map(firstOfPairs)
+        ),
         "compiled pageWithoutCount(id)" -> ((limit, cursor) =>
           compiledIds.pageWithoutCount((), limit, cursor)(profile.api.cursorEnv, ec)
         ),
@@ -78,6 +97,9 @@ abstract class SeekSchema(val database: TestDatabase, val profile: MatrixProfile
           compiledWhole.page((), limit, cursor)(profile.api.cursorEnv, ec).map(p =>
             checkedCount(p.total, p.withoutCount.mapItems(whole))
           )
+        ),
+        "compiled pageWithoutCount((id, id))" -> ((limit, cursor) =>
+          compiledIdPairs.pageWithoutCount((), limit, cursor)(profile.api.cursorEnv, ec).map(firstOfPairs)
         )
       )
     )
