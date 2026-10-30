@@ -5,6 +5,7 @@ import io.github.devnico.slickseeker.support.MyH2Profile
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
+import slick.ast.Util.nodeToNodeOps
 import MyH2Profile.api._
 
 import scala.collection.mutable
@@ -169,6 +170,33 @@ class CompiledSeekPageSpec extends AnyWordSpec with Matchers with BeforeAndAfter
       first shouldBe await(db.run(byMinAge.page(params = 26, limit = 4, cursor = None)))
       await(db.run(identity.pageWithoutCount(params = 26, limit = 4, cursor = first.nextCursor))) shouldBe
         await(db.run(byMinAge.pageWithoutCount(params = 26, limit = 4, cursor = first.nextCursor)))
+    }
+
+    "expose the compiled functions of every statement its pages run" in {
+      val fresh = CompiledSeekPage[Int]((minAge: ConstColumn[Int]) =>
+        persons.filter(_.age >= minAge).toSeeker.seek(_.lastName.desc.nullsLast).seek(_.id.asc)
+      )(_.id)
+      def sql(function: slick.lifted.CompiledFunction[?, ?, ?, ?, ?]): Seq[String] =
+        function.compiledQuery.collect { case statement: slick.ast.CompiledStatement => statement.statement }.toSeq
+
+      val functions = fresh.compiledFunctions
+      functions.size shouldBe 1 + fresh.maxForms // the count and every page form
+      fresh.createdForms shouldBe fresh.maxForms
+      val statements = functions.flatMap(sql)
+      statements.distinct.size shouldBe functions.size
+
+      val run = mutable.Buffer.empty[String]
+      val recording = fresh.withStatementTransform { statement =>
+        run.synchronized(run += statement)
+        statement
+      }
+      val first  = await(db.run(recording.page(params = 0, limit = 9, cursor = None)))
+      val second = await(db.run(recording.page(params = 0, limit = 9, cursor = first.nextCursor)))
+      await(db.run(recording.page(params = 0, limit = 3, cursor = second.prevCursor)))
+      run.toSet should have size 4 // count, first page, forward after None, backward after None
+      statements should contain allElementsOf run
+
+      CompiledSeekPage[Unit]((_: Unit) => persons.toSeeker.seek(_.id.asc))(_.id).compiledFunctions should have size 4
     }
 
     "fail on the placeholder without the statement transform" in {

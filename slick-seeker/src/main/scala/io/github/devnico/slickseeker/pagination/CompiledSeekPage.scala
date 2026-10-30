@@ -135,6 +135,23 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
   /** The page query forms created so far (each compiles on its first execution). */
   def createdForms: Int = 1 + cursorPages.size
 
+  /** The compiled functions of the pages of this instance, e.g. to inspect or verify their statements: the count, the
+    * first page and every cursor page form (forward and backward per combination of `None` cursor values), [[maxForms]]
+    * page forms in all. Creates the forms not created yet, which still compile on their first execution only.
+    */
+  def compiledFunctions: Seq[CompiledFunction[?, ?, ?, ?, ?]] = {
+    val nullable = cursorSupport.columns.map(_.typedType().isInstanceOf[OptionType]).toList
+    // Every combination of None values, in the nullable columns only
+    val nullFlags = nullable.foldRight(List(List.empty[Boolean])) { (isNullable, tails) =>
+      (if (isNullable) List(false, true) else List(false)).flatMap(flag => tails.map(flag :: _))
+    }
+    val cursorForms = for {
+      isBackward <- Seq(false, true)
+      flags      <- nullFlags
+    } yield cursorPage(isBackward, flags)
+    Seq(count, firstPage) ++ cursorForms
+  }
+
   /** Like [[SlickSeeker.pageAs]]: a page with the total count of the seeker's query. */
   def page(params: AU, limit: Int, cursor: Option[String], maxLimit: Int = defaultMaxLimit)(implicit
       cursorEnvironment: CursorEnvironment[CVE],
