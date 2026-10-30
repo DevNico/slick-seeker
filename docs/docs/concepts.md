@@ -375,6 +375,17 @@ byMinAge.pageWithoutCount(params = 30, limit = 20, cursor = None)   // or .page(
   only depend on these parameters: everything else (constants, table and schema names, Scala-side branches) is
   compiled in. Optional filters need either one `CompiledSeekPage` per combination or SQL-side handling
   (`p.isEmpty || …`).
+- A schema compiled in can still be swapped per call: `withStatementTransform` rewrites every SQL statement of a page
+  (count and page query) when the page action is built, sharing the compiled forms, e.g. to compile the queries once
+  against a placeholder schema and run them on the schema of the current tenant. The transform must keep the bound
+  parameters and selected columns, and its result runs unchecked: substitute trusted identifiers only, for a
+  placeholder that can't occur elsewhere in the SQL (e.g. a quoted identifier):
+
+  ```scala
+  // quotedTenantSchema: the quoted schema name of the current tenant, e.g. "tenant_42"
+  byMinAge.withStatementTransform(_.replace("\"tenant_placeholder\"", quotedTenantSchema))
+    .pageWithoutCount(params = 30, limit = 20, cursor = None)
+  ```
 - Each form of the page query is compiled once: the first page and, for forward and backward pages, one per
   combination of `None` values in nullable cursor columns (`maxForms` = 1 + 2 × 2^nullable columns).
 - Items and cursors are the same as those of `pageWithoutCountAs` / `pageAs` for every cursor the seeker produced,
@@ -387,14 +398,6 @@ byMinAge.pageWithoutCount(params = 30, limit = 20, cursor = None)   // or .page(
   `IllegalArgumentException` (`page` before its count runs).
 - Generic plans: see [Cursor Values as Parameters](#cursor-values-as-parameters).
 - The seeker needs at least one seek column.
-- `withStatementTransform` rewrites every SQL statement a page runs (count and page query) before it runs, sharing the
-  compiled forms. For example, to compile the queries once against a placeholder schema and run them on the schema
-  of the current tenant (the transform must keep the bound parameters and selected columns):
-
-  ```scala
-  byMinAge.withStatementTransform(_.replace("tenant_placeholder", tenantSchema))
-    .pageWithoutCount(params = 30, limit = 20, cursor = None)
-  ```
 - `SlickPgTupleSeeker` (deprecated) is not supported; `toSeeker` seekers use row value comparisons where they
   qualify (see [Row Value Comparisons](#row-value-comparisons)).
 

@@ -41,8 +41,8 @@ import scala.concurrent.ExecutionContext
   *
   * The seeker needs at least one seek column.
   *
-  * [[withStatementTransform]] rewrites the SQL statements of a page before they run, e.g. to replace a placeholder
-  * schema compiled in with the schema of the current tenant.
+  * [[withStatementTransform]] rewrites the SQL statements of a page when its action is built, e.g. to replace a
+  * placeholder schema compiled in with the schema of the current tenant.
   */
 final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     build: A => SlickSeeker[E, U, CVE, Any, Any],
@@ -139,9 +139,12 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
   /** The page query forms created so far (each compiles on its first execution). */
   def createdForms: Int = 1 + cursorPages.size
 
-  /** The compiled functions of the pages of this instance, e.g. to inspect or verify their statements: the count, the
-    * first page and every cursor page form (forward and backward per combination of `None` cursor values), [[maxForms]]
-    * page forms in all. Creates the forms not created yet, which still compile on their first execution only.
+  /** The compiled functions of every statement the pages of this instance can run, to inspect or verify them (e.g.
+    * their query trees or SQL): the count, the first page, then the cursor page forms (forward, then backward, each per
+    * combination of `None` values in nullable cursor columns), so `1 + maxForms` in all.
+    *
+    * Creates every cursor page form not created yet (see [[createdForms]]); each still compiles on its first execution
+    * only.
     */
   def compiledFunctions: Seq[CompiledFunction[?, ?, ?, ?, ?]] = {
     // Every combination of None values, in the nullable columns only
@@ -169,13 +172,16 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
   ): dbio.DBIOAction[PaginatedResultWithoutCount[PU], dbio.NoStream, dbio.Effect.Read] =
     pageWithoutCountWith(params, limit, cursor, maxLimit, None)
 
-  /** The pages of this instance with `transform` applied to every SQL statement they run (the count and the page
-    * query), e.g. to replace a placeholder schema with the schema of the current tenant. The compiled forms are shared
-    * with this instance, so this is cheap to call per request.
+  /** The pages of this instance with `transform` applied to every SQL statement they run (the count and the page query)
+    * when the page action is built, e.g. to replace a placeholder schema with the schema of the current tenant. The
+    * compiled forms are shared with this instance, so this is cheap to call per request.
     *
-    * `transform` must keep the bound parameters (`?`) and the selected columns as they are.
+    * `transform` must keep the bound parameters (`?`) and the selected columns as they are. Its result runs unchecked:
+    * substitute trusted identifiers only, for a placeholder that can't occur elsewhere in the SQL (e.g. a quoted
+    * identifier).
     * {{{
-    * byMinAge.withStatementTransform(_.replace("tenant_placeholder", tenantSchema))
+    * // quotedTenantSchema: the quoted schema name of the current tenant, e.g. "tenant_42"
+    * byMinAge.withStatementTransform(_.replace("\"tenant_placeholder\"", quotedTenantSchema))
     *   .pageWithoutCount(params = 30, limit = 20, cursor = None)
     * }}}
     */
