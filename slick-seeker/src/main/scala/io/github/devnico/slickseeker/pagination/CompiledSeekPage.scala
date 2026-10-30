@@ -15,6 +15,7 @@ import slick.lifted.{
   Rep,
   Shape
 }
+import slick.sql.SqlAction
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.ExecutionContext
@@ -39,6 +40,9 @@ import scala.concurrent.ExecutionContext
   * an unchecked cast, or `null`) throws `IllegalArgumentException`, as that value can't be bound.
   *
   * The seeker needs at least one seek column.
+  *
+  * [[withStatementTransform]] rewrites the SQL statements of a page before they run, e.g. to replace a placeholder
+  * schema compiled in with the schema of the current tenant.
   */
 final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     build: A => SlickSeeker[E, U, CVE, Any, Any],
@@ -135,18 +139,79 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
   def page(params: AU, limit: Int, cursor: Option[String], maxLimit: Int = defaultMaxLimit)(implicit
       cursorEnvironment: CursorEnvironment[CVE],
       ec: ExecutionContext
+  ): dbio.DBIOAction[PaginatedResult[PU], dbio.NoStream, dbio.Effect.Read] =
+    pageWith(params, limit, cursor, maxLimit, None)
+
+  /** Like [[SlickSeeker.pageWithoutCountAs]]: a page without total count. */
+  def pageWithoutCount(params: AU, limit: Int, cursor: Option[String], maxLimit: Int = defaultMaxLimit)(implicit
+      cursorEnvironment: CursorEnvironment[CVE],
+      ec: ExecutionContext
+  ): dbio.DBIOAction[PaginatedResultWithoutCount[PU], dbio.NoStream, dbio.Effect.Read] =
+    pageWithoutCountWith(params, limit, cursor, maxLimit, None)
+
+  /** The pages of this instance with `transform` applied to every SQL statement they run (the count and the page
+    * query), e.g. to replace a placeholder schema with the schema of the current tenant. The compiled forms are shared
+    * with this instance, so this is cheap to call per request.
+    *
+    * `transform` must keep the bound parameters (`?`) and the selected columns as they are.
+    * {{{
+    * byMinAge.withStatementTransform(_.replace("tenant_placeholder", tenantSchema))
+    *   .pageWithoutCount(params = 30, limit = 20, cursor = None)
+    * }}}
+    */
+  def withStatementTransform(transform: String => String): StatementTransformed =
+    new StatementTransformed(transform)
+
+  /** Pages whose SQL statements are rewritten by `transform`, see [[withStatementTransform]]. */
+  final class StatementTransformed private[CompiledSeekPage] (transform: String => String) {
+
+    /** Like [[CompiledSeekPage.page]], with the statements transformed. */
+    def page(params: AU, limit: Int, cursor: Option[String], maxLimit: Int = defaultMaxLimit)(implicit
+        cursorEnvironment: CursorEnvironment[CVE],
+        ec: ExecutionContext
+    ): dbio.DBIOAction[PaginatedResult[PU], dbio.NoStream, dbio.Effect.Read] =
+      pageWith(params, limit, cursor, maxLimit, Some(transform))
+
+    /** Like [[CompiledSeekPage.pageWithoutCount]], with the statements transformed. */
+    def pageWithoutCount(params: AU, limit: Int, cursor: Option[String], maxLimit: Int = defaultMaxLimit)(implicit
+        cursorEnvironment: CursorEnvironment[CVE],
+        ec: ExecutionContext
+    ): dbio.DBIOAction[PaginatedResultWithoutCount[PU], dbio.NoStream, dbio.Effect.Read] =
+      pageWithoutCountWith(params, limit, cursor, maxLimit, Some(transform))
+  }
+
+  private def transformed[R, S <: dbio.NoStream, E <: dbio.Effect](
+      action: SqlAction[R, S, E],
+      transform: Option[String => String]
+  ): dbio.DBIOAction[R, S, E] =
+    transform.fold[dbio.DBIOAction[R, S, E]](action)(f => action.overrideStatements(action.statements.map(f)))
+
+  private def pageWith(
+      params: AU,
+      limit: Int,
+      cursor: Option[String],
+      maxLimit: Int,
+      transform: Option[String => String]
+  )(implicit
+      cursorEnvironment: CursorEnvironment[CVE],
+      ec: ExecutionContext
   ): dbio.DBIOAction[PaginatedResult[PU], dbio.NoStream, dbio.Effect.Read] = {
     import profile.api._
     // Built first, so it throws (bad cursors, mistyped cursor values) before the count runs, like pageWithoutCount
-    val withoutCount = pageWithoutCount(params, limit, cursor, maxLimit)
+    val withoutCount = pageWithoutCountWith(params, limit, cursor, maxLimit, transform)
     for {
-      total  <- count(params).result
+      total  <- transformed(count(params).result, transform)
       result <- withoutCount
     } yield result.withCount(total)
   }
 
-  /** Like [[SlickSeeker.pageWithoutCountAs]]: a page without total count. */
-  def pageWithoutCount(params: AU, limit: Int, cursor: Option[String], maxLimit: Int = defaultMaxLimit)(implicit
+  private def pageWithoutCountWith(
+      params: AU,
+      limit: Int,
+      cursor: Option[String],
+      maxLimit: Int,
+      transform: Option[String => String]
+  )(implicit
       cursorEnvironment: CursorEnvironment[CVE],
       ec: ExecutionContext
   ): dbio.DBIOAction[PaginatedResultWithoutCount[PU], dbio.NoStream, dbio.Effect.Read] = {
@@ -159,9 +224,12 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     def compiledPage(cursorValues: Option[(Boolean, Any)]) = {
       val rows: DBIOAction[Rows, NoStream, Effect.Read] = cursorValues match {
         case None =>
-          firstPage((params, fetchLimit)).result
+          transformed(firstPage((params, fetchLimit)).result, transform)
         case Some((isBackward, values)) =>
-          cursorPage(isBackward, cursorSupport.nullFlags(values))((params, values, fetchLimit)).result
+          transformed(
+            cursorPage(isBackward, cursorSupport.nullFlags(values))((params, values, fetchLimit)).result,
+            transform
+          )
       }
       rows.map { results =>
         cursorSupport.toPage(results, cursorValues.exists(_._1), cursorValues.isDefined, normalizedLimit)

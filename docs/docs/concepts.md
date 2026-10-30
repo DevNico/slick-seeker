@@ -387,6 +387,14 @@ byMinAge.pageWithoutCount(params = 30, limit = 20, cursor = None)   // or .page(
   `IllegalArgumentException` (`page` before its count runs).
 - Generic plans: see [Cursor Values as Parameters](#cursor-values-as-parameters).
 - The seeker needs at least one seek column.
+- `withStatementTransform` rewrites every SQL statement a page runs (count and page query) before it runs, sharing the
+  compiled forms. For example, to compile the queries once against a placeholder schema and run them on the schema
+  of the current tenant (the transform must keep the bound parameters and selected columns):
+
+  ```scala
+  byMinAge.withStatementTransform(_.replace("tenant_placeholder", tenantSchema))
+    .pageWithoutCount(params = 30, limit = 20, cursor = None)
+  ```
 - `SlickPgTupleSeeker` (deprecated) is not supported; `toSeeker` seekers use row value comparisons where they
   qualify (see [Row Value Comparisons](#row-value-comparisons)).
 
