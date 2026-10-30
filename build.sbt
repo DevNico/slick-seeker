@@ -32,7 +32,7 @@ ThisBuild / makePomConfiguration := makePomConfiguration.value.withConfiguration
 // Version and Scala settings
 val slickSeekerVersion = "0.9.0"
 // The release binary compatibility is checked against (mimaReportBinaryIssues); bump it after each release
-val mimaBaseVersion = "0.8.0"
+val mimaBaseVersion = "0.9.0"
 
 val scala3Version   = "3.3.5"
 val scala213Version = "2.13.16"
