@@ -42,7 +42,7 @@ import scala.concurrent.ExecutionContext
   * The seeker needs at least one seek column.
   *
   * [[withStatementTransform]] rewrites the SQL statements of a page when its action is built, e.g. to replace a
-  * placeholder schema compiled in with the schema of the current tenant.
+  * placeholder schema compiled in with a schema chosen per call.
   */
 final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     build: A => SlickSeeker[E, U, CVE, Any, Any],
@@ -173,15 +173,15 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     pageWithoutCountWith(params, limit, cursor, maxLimit, None)
 
   /** The pages of this instance with `transform` applied to every SQL statement they run (the count and the page query)
-    * when the page action is built, e.g. to replace a placeholder schema with the schema of the current tenant. The
-    * compiled forms are shared with this instance, so this is cheap to call per request.
+    * when the page action is built, e.g. to replace a placeholder schema with a schema chosen per call. The compiled
+    * forms are shared with this instance, so this is cheap to call per request.
     *
     * `transform` must keep the bound parameters (`?`) and the selected columns as they are. Its result runs unchecked:
     * substitute trusted identifiers only, for a placeholder that can't occur elsewhere in the SQL (e.g. a quoted
     * identifier).
     * {{{
-    * // quotedTenantSchema: the quoted schema name of the current tenant, e.g. "tenant_42"
-    * byMinAge.withStatementTransform(_.replace("\"tenant_placeholder\"", quotedTenantSchema))
+    * // quotedSchema: the quoted name of the schema to run on, e.g. "\"customer_42\""
+    * byMinAge.withStatementTransform(_.replace("\"schema_placeholder\"", quotedSchema))
     *   .pageWithoutCount(params = 30, limit = 20, cursor = None)
     * }}}
     */
