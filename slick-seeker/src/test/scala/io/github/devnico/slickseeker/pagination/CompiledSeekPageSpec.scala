@@ -164,7 +164,7 @@ class CompiledSeekPageSpec extends AnyWordSpec with Matchers with BeforeAndAfter
       statements.toSet.size shouldBe 1 + onPlaceholder.createdForms
     }
 
-    "page like without a transform with the identity transform" in {
+    "page with the identity transform like without a transform" in {
       val identity = byMinAge.withStatementTransform(sql => sql)
       val first    = await(db.run(identity.page(params = 26, limit = 4, cursor = None)))
       first shouldBe await(db.run(byMinAge.page(params = 26, limit = 4, cursor = None)))
@@ -201,11 +201,8 @@ class CompiledSeekPageSpec extends AnyWordSpec with Matchers with BeforeAndAfter
 
     "fail on the placeholder without the statement transform" in {
       val onPlaceholder = CompiledSeekPage[Unit]((_: Unit) => placeholderPersons.toSeeker.seek(_.id.asc))(_.id)
-      an[Exception] should be thrownBy await(db.run(onPlaceholder.pageWithoutCount(
-        params = (),
-        limit = 3,
-        cursor = None
-      )))
+      an[org.h2.jdbc.JdbcSQLSyntaxErrorException] should be thrownBy
+        await(db.run(onPlaceholder.pageWithoutCount(params = (), limit = 3, cursor = None)))
     }
   }
 }

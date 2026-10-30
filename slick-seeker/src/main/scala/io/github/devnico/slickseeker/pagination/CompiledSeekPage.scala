@@ -66,6 +66,10 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
 
   private def placeholder[T](what: String): Any => T = _ => throw new IllegalStateException(s"$what (structure only)")
 
+  // Per cursor column (first column first): whether it is nullable, i.e. has forms for `None` cursor values
+  private def nullableColumns(columns: Seq[SeekColumn[E, U, CVE]]): List[Boolean] =
+    columns.map(_.typedType().isInstanceOf[OptionType]).toList
+
   // The cursor (columns, types, encoding) from the seeker's structure without real parameters: nothing is executed and
   // the structure's query is not kept.
   private val cursorSupport: SeekCursorSupport[E, U, CVE, Any, Any] = {
@@ -74,7 +78,7 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     // Builds every form once (forward and backward, without and with None values in the nullable cursor columns), so a
     // sort key or filter that fails to build its condition fails here rather than on a later page
     val cursor   = structure.cursorSupport.paramShape(settings.paramType).buildParams(placeholder("cursor value"))
-    val nullable = structure.columns.map(_.typedType().isInstanceOf[OptionType]).toList
+    val nullable = nullableColumns(structure.columns)
     for {
       isBackward <- Seq(false, true)
       nullFlags  <- Seq(nullable.map(_ => false), nullable).distinct
@@ -140,9 +144,8 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
     * page forms in all. Creates the forms not created yet, which still compile on their first execution only.
     */
   def compiledFunctions: Seq[CompiledFunction[?, ?, ?, ?, ?]] = {
-    val nullable = cursorSupport.columns.map(_.typedType().isInstanceOf[OptionType]).toList
     // Every combination of None values, in the nullable columns only
-    val nullFlags = nullable.foldRight(List(List.empty[Boolean])) { (isNullable, tails) =>
+    val nullFlags = nullableColumns(cursorSupport.columns).foldRight(List(List.empty[Boolean])) { (isNullable, tails) =>
       (if (isNullable) List(false, true) else List(false)).flatMap(flag => tails.map(flag :: _))
     }
     val cursorForms = for {
@@ -197,11 +200,11 @@ final class CompiledSeekPage[A, AU, E, U, CVE, P, PU] private[pagination] (
       pageWithoutCountWith(params, limit, cursor, maxLimit, Some(transform))
   }
 
-  private def transformed[R, S <: dbio.NoStream, E <: dbio.Effect](
-      action: SqlAction[R, S, E],
+  private def transformed[R, S <: dbio.NoStream, Eff <: dbio.Effect](
+      action: SqlAction[R, S, Eff],
       transform: Option[String => String]
-  ): dbio.DBIOAction[R, S, E] =
-    transform.fold[dbio.DBIOAction[R, S, E]](action)(f => action.overrideStatements(action.statements.map(f)))
+  ): dbio.DBIOAction[R, S, Eff] =
+    transform.fold[dbio.DBIOAction[R, S, Eff]](action)(f => action.overrideStatements(action.statements.map(f)))
 
   private def pageWith(
       params: AU,
